@@ -16,6 +16,40 @@ logger = logging.getLogger(__name__)
 class FinalizeArgs(BaseModel):
     reasoning: str = Field(..., description="Brief summary of the findings and why you’re stopping now.")
 
+
+async def pdf_tool(
+    url: str,
+    query: str
+) -> str:
+    """
+    Process a PDF document from a URL and extract information based on a query.
+
+    Args:
+        url: URL of the PDF document to process
+        query: Specific information to extract from the PDF
+    Returns:
+        Extracted information as a string
+    Budget Impact:
+        - Seconds: 30 (upload and processing time)
+    Implementation:
+        - Uses PDFAdapter from agentic_adapters
+        - Downloads PDF, uploads to Google GenAI File Search Store
+        - Executes query using Gemini model with File Search tool
+    """
+    from agentic_adapters.pdf_adapter import PDFAdapter
+
+    pdf_adapter = PDFAdapter()
+    try:
+        logger.info(f"PDF tool: Processing PDF from {url} with query '{query[:50]}...'")
+        result = await pdf_adapter.process_pdf(url=url, query=query)
+        logger.info(f"PDF tool: Successfully processed PDF, result length {len(result)} chars")
+        return result
+
+    except Exception as e:
+        logger.error(f"PDF tool failed: {e}")
+        return f"Error processing PDF: {str(e)}"
+    
+    
 async def serp_tool(
     queries: List[str]
 ) -> str:
@@ -393,6 +427,38 @@ def create_search_linkedin_posts_tool(prospect):
 
 # Tool registry with metadata for LLM consumption
 TOOL_REGISTRY = {
+    "pdf": {
+        "function": pdf_tool,
+        "description": "Process a PDF document from a URL and extract information based on a query. Downloads the PDF, uploads it to Google GenAI File Search Store, and executes the query using Gemini model with File Search tool.",
+        "parameters": {
+            "url": {
+                "type": "string",
+                "required": True,
+                "description": "URL of the PDF document to process"
+            },
+            "query": {
+                "type": "string",
+                "required": True,
+                "description": "Specific information to extract from the PDF"
+            }
+        },
+        "returns": {
+            "type": "string",
+            "description": "Extracted information as a string"
+        },
+        "budget_cost": {
+            "queries": 1,
+        },
+        "use_cases": [
+            "Extracting financial data from PDF reports",
+            "Summarizing PDF documents",
+            "Retrieving specific information from PDFs"
+        ],
+        "example": {
+            "url": "https://example.com/report.pdf",
+            "query": "Extract financial summary"
+        }
+    },
     "serp": {
         "function": serp_tool,
         "description": "Search the web using multiple Google Search queries in parallel. IMPORTANT: This tool accepts a LIST of queries (not a single query) and executes them simultaneously. Use this to efficiently gather information from multiple search angles at once. Returns formatted text with query groups and markdown-linked results in Google SERP style, making it easy to read and select URLs for crawling. Company context and datapoint context are automatically provided from the current research task.",
@@ -695,6 +761,11 @@ def create_simple_tools():
     from langchain_core.tools import StructuredTool
     from typing import List
 
+    def pdf_sync(url: str, query: str) -> str:
+        """Process a PDF document from a URL and extract information based on a query."""
+        result = asyncio.run(pdf_tool(url, query))
+        return result
+    
     def serp_sync(queries: List[str]) -> str:
         """
         Search Google using multiple queries in parallel.
@@ -787,6 +858,12 @@ def create_simple_tools():
 
     return [
         StructuredTool.from_function(
+            func=pdf_sync,
+            name="pdf",
+            description=TOOL_REGISTRY["pdf"]["description"],
+            args_schema=None,  # Will be inferred from type hints
+        ),
+        StructuredTool.from_function(
             func=serp_sync,
             name="serp",
             description=TOOL_REGISTRY["serp"]["description"],
@@ -836,6 +913,7 @@ def create_async_tools() -> List:
         List of async tool functions with InjectedState support
     """
     return [
+        pdf_tool, 
         serp_tool,       # Has InjectedState for company_context/datapoint_definition
         crawl_tool,      # No state injection needed
         extract_links_tool,  # No state injection needed
