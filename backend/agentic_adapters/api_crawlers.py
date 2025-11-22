@@ -20,8 +20,6 @@ except ImportError:
     HAS_BS4 = False
     logger.warning("BeautifulSoup4 not installed. HTML parsing for AI Overview will not be available. Install with: pip install beautifulsoup4")
 
-
-
 # Redis Fixed Window Rate Limiter for distributed RPS control
 class RedisFixedWindowRPS:
     """
