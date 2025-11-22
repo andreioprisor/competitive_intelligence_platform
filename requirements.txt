@@ -1,0 +1,56 @@
+beautifulsoup4
+certifi
+fastapi
+leadora
+pydantic
+python-dotenv
+python_json_logger
+Requests
+setuptools
+tldextract
+uvicorn
+google-generativeai
+numpy
+google
+google-genai
+traitlets
+psutil
+sqlalchemy
+psycopg2-binary
+demjson3
+json5
+PyYAML
+# Core framework
+langgraph
+typing-extensions>=4.0.0
+litellm<1.77.0
+# Web crawling
+crawl4ai
+playwright
+
+# HTTP clients
+aiohttp>=3.9.0
+requests>=2.31.0
+
+# Configuration
+python-dotenv>=1.0.0
+
+# Utilities
+asyncio-mqtt>=0.16.0
+simhash>=2.1.2
+
+# Redis and job queue
+redis>=4.0.0
+rq>=1.15.0
+
+# Database
+alembic>=1.8.0
+
+google-cloud-tasks
+
+html2text
+langchain-core>=0.3.0,<1.0.0
+langchain-google-genai>=2.0.0
+langchain>=0.3.0
+langchain-xai
+langchain-openai
