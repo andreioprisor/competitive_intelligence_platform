@@ -871,20 +871,20 @@ if __name__ == "__main__":
 
     # Create ReactGraph with company and datapoint context
     company_context = {
-        "name": "NVIDIA Corporation",
-        "domain": "nvidia.com",
-        "industry": "Semiconductors / AI Hardware",
-        "size": "10000+ employees"
+        "name": "Omniconvert",
+        "domain": "omniconvert.com",
+        "industry": "SaaS / Conversion Rate Optimization",
+        "size": "50-100 employees"
     }
 
     datapoint_context = {
-        "dp_name": "Q3 FY2025 Revenue and Data Center Growth",
-        "definition": "NVIDIA's total revenue for Q3 FY2025 (ending October 2025) and a comprehensive breakdown of what drove this revenue.",
+        "dp_name": "Current Google Ads Strategy Analysis",
+        "definition": "Analyze Omniconvert's current Google Ads advertising strategy including ad creatives, messaging, targeting keywords, value propositions, and campaign patterns from the last 30 days.",
         "value_ranges": {
-            "bad": "No earnings data found or outdated information",
-            "average": "Total revenue mentioned but missing data center segment breakdown",
-            "good": "Both total revenue and data center revenue clearly stated with growth percentages",
-            "best": "Detailed breakdown including total revenue, data center revenue, sequential and YoY growth rates, and GPU sales metrics"
+            "bad": "No ads found or only 1-2 ads with minimal information",
+            "average": "Found ads but missing detailed analysis of messaging patterns or targeting strategy",
+            "good": "Multiple ads analyzed with clear messaging themes, keywords, and value propositions identified",
+            "best": "Comprehensive analysis including ad variations, messaging evolution, targeting keywords, CTAs, unique value propositions, and strategic insights across different ad formats"
         }
     }
 

@@ -27,6 +27,7 @@ class Budget:
     evidence_tokens: int
     ai_overviews: int
     pdf: int
+    google_ads: int
     
 
 
@@ -38,6 +39,7 @@ class Usage:
     evidence_tokens: int = 0
     ai_overviews: int = 0
     pdf: int = 0
+    google_ads: int = 0
 
 
 @dataclass
@@ -80,7 +82,8 @@ class BudgetManager:
             u.pages >= b.pages or
             u.evidence_tokens >= b.evidence_tokens or
             u.ai_overviews >= b.ai_overviews or
-            u.pdf >= b.pdf
+            u.pdf >= b.pdf or
+            u.google_ads >= b.google_ads
         )
         if hard_stop:
             raise RuntimeError("Budget exhausted")
@@ -224,7 +227,8 @@ def node_controller(state: AgenticRunState) -> Dict[str, Any]:
                     seconds=budgets.get("max_seconds", 60),
                     evidence_tokens=budgets.get("max_evidence_tokens", 3000),
                     ai_overviews=budgets.get("max_ai_overviews", 1),
-                    pdf=budgets.get("max_pdf", 2)
+                    pdf=budgets.get("max_pdf", 2),
+                    google_ads=budgets.get("max_google_ads", 1)
                 )
             )
             logger.info(f"Controller: Registered budget for thread {thread_id}")
@@ -238,7 +242,8 @@ def node_controller(state: AgenticRunState) -> Dict[str, Any]:
                 "seconds": rec.usage.seconds,
                 "evidence_tokens": rec.usage.evidence_tokens,
                 "ai_overviews": rec.usage.ai_overviews,
-                "pdf": rec.usage.pdf
+                "pdf": rec.usage.pdf,
+                "google_ads": rec.usage.google_ads
             }
             budget_remaining = {
                 "max_queries": rec.budget.queries - rec.usage.queries,
@@ -246,7 +251,8 @@ def node_controller(state: AgenticRunState) -> Dict[str, Any]:
                 "max_seconds": rec.budget.seconds - rec.usage.seconds,
                 "max_evidence_tokens": rec.budget.evidence_tokens - rec.usage.evidence_tokens,
                 "max_ai_overviews": rec.budget.ai_overviews - rec.usage.ai_overviews,
-                "max_pdf": rec.budget.pdf - rec.usage.pdf
+                "max_pdf": rec.budget.pdf - rec.usage.pdf,
+                "max_google_ads": rec.budget.google_ads - rec.usage.google_ads
             }
         else:
             usage = state.get("usage", {})

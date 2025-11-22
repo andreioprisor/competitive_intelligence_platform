@@ -28,6 +28,7 @@ REQUIREMENTS
   - Moderate datapoints (job description analysis, multinationals, seniority levels, targe roles at smaller comapanies (<500 emp): 4-5 serp queries, 5-10 crawls, 1-3 ai overviews)
   - Complex datapoints (involving role finding for bigger companies(>500 emp), estimating based on different things (Eg. estimate number of reviews for all locations),  multi step datapoints (Eg. find x first then use that to find y), things involving large enterprises: 5-8 serp queries, 10-15 crawls, 3-4 ai overviews)
   - PDF tool: Use ONLY when datapoint explicitly requires document analysis (annual reports, financial statements, white papers). Budget 1-3 PDFs based on complexity.
+  - Google Ads tool: Use ONLY when datapoint requires advertising/marketing data (ad creatives, messaging, ad spend patterns, competitor advertising analysis). Budget 1 call per datapoint.
 - Instructions must align perfectly with the budget
 - Output MUST be **valid JSON** and match this schema exactly:
 
@@ -48,7 +49,8 @@ REQUIREMENTS
     "crawl": Y,
     "ai_overview": Z,
     "search_linkedin_posts": W,
-    "pdf": P
+    "pdf": P,
+    "google_ads": G
   }
 }
 

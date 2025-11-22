@@ -534,7 +534,7 @@ TOOL_REGISTRY = {
             "description": "List of ad variations with details"
         },
         "budget_cost": {
-            "queries": 1,
+            "google_ads": 1,
         },
         "use_cases": [
             "Gathering competitive advertising data",
