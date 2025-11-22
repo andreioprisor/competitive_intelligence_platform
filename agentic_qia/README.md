@@ -1,176 +1,192 @@
-# Agentic QIA - ReAct-Style Research Agent
+# Agentic QIA - LangGraph Research Workflow
 
-True agentic implementation of QIA using LangGraph with tool-based loop execution.
+A LangGraph-based research agent that performs structured data collection about companies using ReAct reasoning and tool execution.
+
+## Quick Start
+
+### Prerequisites
+
+1. Python 3.12+
+2. Required environment variables in `.env`:
+   ```
+   OPENROUTER_API_KEY=your_key_here
+   GEMINI_API_KEY=your_key_here
+   SERP_API_KEY=your_key_here
+   SCRAPINGDOG_API_KEY=your_key_here
+   ```
+
+### Running the Agent
+
+```bash
+# From project root
+python3 -m agentic_qia.graph
+```
+
+The default example in `graph.py` researches cloud technologies used by emag.ro. Modify the `main()` function at the bottom of `graph.py` to customize:
+
+```python
+async def main():
+    company_context = {
+        "name": "Your Company",
+        "domain": "example.com",
+        "industry": "Technology",
+        "size": "500-1000"
+    }
+
+    datapoint_context = {
+        "dp_name": "Your Datapoint Name",
+        "definition": "What you want to find out",
+        "value_ranges": {
+            "bad": "Description of bad case",
+            "good": "Description of good case",
+            "best": "Description of best case"
+        }
+    }
+
+    graph = ReactGraph(company_context, datapoint_context)
+    result = await graph.ainvoke(
+        prompt="Your research question here"
+    )
+    return result
+
+result = asyncio.run(main())
+print(json.dumps(result, indent=2))
+```
 
 ## Architecture
 
 ```
-START → Triage → [AGENT LOOP] → Synthesis → END
+START → Triage → [ReAct Agent Loop] → Controller → Synthesis → END
 
-[AGENT LOOP]:
-  Reasoning → Tool Execution → Loop Control
-      ↑______________|
-         (loops until termination)
+[ReAct Agent Loop]:
+  LLM Reasoning → Tool Execution → Message Updates
+      ↑___________________|
+         (loops until controller signals stop)
 ```
 
-## Files
+### Workflow Details
 
-### Core Components
+1. **Triage Node** (`node_triage` in `nodes.py`):
+   - Analyzes the datapoint and company context
+   - Creates a research plan with goal, instructions, and tool budgets
+   - Uses OpenRouterAdapter to call LLM
 
-- **[state.py](state.py)** - Enhanced state schema with loop tracking
-  - `AgenticRunState`: TypedDict with loop iteration, budget tracking, tool call history
-  - Annotated fields for state accumulation (evidence, tool_calls, agent_thoughts)
+2. **ReAct Agent Loop** (LangGraph built-in):
+   - Executes tools based on the research plan
+   - Reasons about next steps
+   - Manages message history with pre/post hooks
 
-- **[graph.py](graph.py)** - LangGraph orchestration
-  - `build_agentic_app()`: Builds graph with conditional routing
-  - `should_continue_loop()`: Routing function for loop control
-  - Edges: triage → reasoning → tool_execution → loop_control → (reasoning | synthesis)
+4. **Synthesis Node** (`node_final_synthesis` in `nodes.py`):
+   - Compiles all collected evidence
+   - Generates structured response
+   - Maps findings to datapoint value ranges
 
-- **[nodes.py](nodes.py)** - Node implementation interfaces
-  - `node_triage`: Convert prompt to research plan
-  - `node_agent_reasoning`: ReAct decision loop
-  - `node_tool_execution`: Execute selected tool
-  - `node_loop_controller`: Check termination conditions
-  - `node_final_synthesis`: Create final answer
+### Key Components
 
-- **[tools.py](tools.py)** - Tool templates
-  - `serp_tool`: Web search with reranking
-  - `crawl_tool`: Extract webpage content
-  - `discover_urls_tool`: Find company website pages (NEW)
-  - `ai_overview_tool`: Get Google AI Overview
-  - `get_tool_cost()`: Budget calculation utility
+- **`graph.py`**: Main orchestration, ReactGraph class, workflow definition
+- **`nodes.py`**: Node implementations (triage, controller, synthesis)
+- **`tools.py`**: Tool wrappers that the LLM can call
+- **`state.py`**: State schema for the graph
+- **`agentic_adapters/`**: Backend implementations for tools (SERP, crawling, etc.)
+- **`prompts/`**: Prompt templates for triage and synthesis
 
-### Prompts
+## Implementing New Tools
 
-- **[prompts/agent_reasoning.md](prompts/agent_reasoning.md)** - ReAct reasoning template
-  - Tool descriptions with cost/purpose/usage
-  - Decision framework and termination criteria
-  - JSON output schema
-  - Examples for each scenario
+The system uses a two-layer architecture:
+1. **Adapters** (`agentic_adapters/`) - Complex backend logic, API calls, data processing
+2. **Tool wrappers** (`tools.py`) - LLM-friendly interfaces with budget tracking
 
-## Key Differences from `qia_agent`
+### Existing Adapters
 
-| Feature | `qia_agent` (Linear) | `agentic_qia` (Loop) |
-|---------|---------------------|----------------------|
-| **Execution** | Fixed pipeline | Dynamic tool selection |
-| **Queries** | All generated upfront | Generated on-demand |
-| **Termination** | Always runs full pipeline | Early stop when sufficient |
-| **Budget** | Set once, no monitoring | Real-time tracking |
-| **Reasoning** | None | ReAct thought chain |
-| **Tools** | Hard-coded in nodes | Registry-based, extensible |
+Already implemented in `agentic_adapters/`:
+- **`serp_adapter.py`** - Google SERP API integration
+- **`crawl_adapter.py`** - Web page content extraction
+- **`llm_adapter.py`** - Gemini API for synthesis
+- **`pages_synthesis_adapter.py`** - Multi-page summarization
+- **`api_crawlers.py`** - ScrapingDog for protected pages
 
-## Usage
+### Adding a New Tool
+
+#### Step 1: Create Adapter (for complex logic only)
 
 ```python
-from leadora.adapters.agentic_qia import build_agentic_app, create_initial_state
-
-# Build graph
-app = build_agentic_app()
-
-# Create initial state
-state = create_initial_state(
-    prompt="What is TechCorp's employee count?",
-    company_context={
-        "name": "TechCorp",
-        "domain": "techcorp.com",
-        "industry": "Technology"
-    }
-)
-
-# Run agent
-result = app.invoke(state)
-
-# Access results
-print(result["final_answer"])
-print(f"Confidence: {result['final_confidence']}")
-print(f"Iterations: {result['loop_iteration']}")
-print(f"Termination: {result['termination_reason']}")
+# agentic_adapters/my_adapter.py
+class MyAdapter:
+    async def fetch_data(self, query: str) -> Dict:
+        # API calls, processing, error handling
+        return {"results": [...]}
 ```
 
-## Implementation Status
+#### Step 2: Create Tool Wrapper
 
-### Phase 1: Structure ✅ COMPLETE
-- [x] State schema with loop tracking
-- [x] Graph with conditional routing
-- [x] Node interfaces (documentation only)
-- [x] Tool templates (documentation only)
-- [x] ReAct reasoning prompt
+```python
+# tools.py
+async def my_tool(query: str) -> str:
+    """Tool description for LLM"""
+    from agentic_adapters.my_adapter import MyAdapter
 
-### Phase 2: Implementation (TODO)
-- [ ] Implement tool functions (serp, crawl, discover_urls, ai_overview)
-- [ ] Implement LLM-based agent reasoning node
-- [ ] Implement triage node (reuse from qia_agent)
-- [ ] Implement synthesis node (reuse from qia_agent)
-- [ ] Implement tool execution with budget tracking
-- [ ] Add budget_tracker utility
-- [ ] Add quality_assessor utility
+    adapter = MyAdapter()
+    results = await adapter.fetch_data(query)
 
-### Phase 3: Testing (TODO)
-- [ ] Unit tests for each node
-- [ ] Integration test for full graph
-- [ ] Test budget exhaustion scenarios
-- [ ] Test early termination with high confidence
-- [ ] Test loop iteration limits
-- [ ] Compare metrics vs qia_agent
+    # Format as markdown for LLM
+    return f"### Results\n- {results}"
+```
 
-### Phase 4: Optimization (TODO)
-- [ ] Tune ReAct prompt based on failure cases
-- [ ] Optimize tool selection heuristics
-- [ ] Add caching for repeated queries
-- [ ] Implement parallel tool execution where possible
+#### Step 3: Register with Budget Tracking
 
-## Design Principles
+```python
+# In create_budget_aware_tools()
+async def my_tool_with_budget(query: str):
+    thread_id = get_thread_id()
+    BudgetManager.check_limits(thread_id)
+    result = await my_tool(query)
+    BudgetManager.inc(thread_id, my_resource=1)
+    return result
 
-1. **Separation of Concerns**
-   - State: Pure data structure
-   - Tools: Reusable functions with clear interfaces
-   - Nodes: Orchestration logic only
-   - Graph: Flow control
+tools.append(StructuredTool.from_function(
+    coroutine=my_tool_with_budget,
+    name="my_tool",
+    description="When to use this tool"
+))
+```
 
-2. **Budget Awareness**
-   - Real-time tracking of queries/pages/time
-   - Pre-flight checks before tool execution
-   - Forced termination on exhaustion
+#### Step 4: Update Budget System (if needed)
 
-3. **Transparency**
-   - Agent thoughts recorded for every decision
-   - Tool call history with costs
-   - Termination reason always provided
+```python
+# nodes.py - add new resource type
+@dataclass
+class Budget:
+    my_resource: int
 
-4. **Extensibility**
-   - Tool registry for easy additions
-   - Prompt templates for customization
-   - State schema accommodates new fields
+@dataclass
+class Usage:
+    my_resource: int = 0
+```
 
-## Agent Behavior
+#### Step 5: Document in Triage Prompt
 
-The agent follows this decision pattern:
+```markdown
+# prompts/triage.md
+- my_tool: Description and when to use
+- Budget: X for simple, Y for complex
+```
 
-1. **Explore company website first** (discover_urls → crawl)
-   - Most accurate source for company info
-   - Cheapest in terms of API costs
+## Best Practices
 
-2. **External search for verification** (serp → crawl)
-   - Confirm findings from multiple sources
-   - Higher confidence with cross-validation
+**Separation of Concerns**
+- Adapters = Complex logic
+- Tools = LLM formatting + budget
 
-3. **AI Overview for protected sites** (ai_overview)
-   - Fallback when direct crawl blocked
-   - Glassdoor, G2, Capterra, etc.
+**LLM-Friendly Output**
+- Markdown formatting
+- Concise but informative
+- No raw JSON
 
-4. **Terminate when sufficient** (TERMINATE)
-   - Quality score >= 0.9 + min sources met
-   - OR budget exhausted
-   - OR max iterations (10)
+**Error Handling**
+- Log errors clearly
+- Return helpful messages
+- Fail gracefully
 
-## Next Steps
-
-To implement Phase 2, start with:
-
-1. **tools.py** - Implement `serp_tool` using existing `SerpAdapter`
-2. **tools.py** - Implement `crawl_tool` using existing `CrawlAdapter`
-3. **tools.py** - Implement `discover_urls_tool` with sitemap parser
-4. **nodes.py** - Implement `node_agent_reasoning` with LLM call
-5. **Test end-to-end** with simple query
-
-See [IMPLEMENTATION.md](IMPLEMENTATION.md) for detailed implementation guide (to be created).
+**Async by Default**
+- Enable parallel execution
+- Use `async def` for all tools
