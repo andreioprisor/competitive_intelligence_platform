@@ -49,3 +49,4 @@ html2text
 langchain-core
 langchain
 langchain-openai
+apify-client
