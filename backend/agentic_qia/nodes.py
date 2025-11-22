@@ -26,6 +26,8 @@ class Budget:
     seconds: int
     evidence_tokens: int
     ai_overviews: int
+    pdf: int
+    
 
 
 @dataclass
@@ -35,6 +37,7 @@ class Usage:
     seconds: int = 0
     evidence_tokens: int = 0
     ai_overviews: int = 0
+    pdf: int = 0
 
 
 @dataclass
@@ -76,7 +79,8 @@ class BudgetManager:
             u.queries >= b.queries or
             u.pages >= b.pages or
             u.evidence_tokens >= b.evidence_tokens or
-            u.ai_overviews >= b.ai_overviews
+            u.ai_overviews >= b.ai_overviews or
+            u.pdf >= b.pdf
         )
         if hard_stop:
             raise RuntimeError("Budget exhausted")
@@ -129,6 +133,9 @@ def node_triage(state: AgenticRunState) -> Dict[str, Any]:
         prompt = prompt.replace("{datapoint_definition}", definition)
         prompt = prompt.replace("{value_ranges}", json.dumps(value_ranges, indent=2) if isinstance(value_ranges, dict) else str(value_ranges))
         prompt = prompt.replace("{available_tools}", json.dumps(available_tools, indent=2) if isinstance(available_tools, dict) else str(available_tools))
+
+        print("Triage prompt:")
+        print(prompt)  # DEBUG
 
         # Use OpenRouterAdapter for LLM call
         adapter = OpenRouterAdapter()
@@ -216,7 +223,8 @@ def node_controller(state: AgenticRunState) -> Dict[str, Any]:
                     pages=budgets.get("max_pages", 6),
                     seconds=budgets.get("max_seconds", 60),
                     evidence_tokens=budgets.get("max_evidence_tokens", 3000),
-                    ai_overviews=budgets.get("max_ai_overviews", 1)
+                    ai_overviews=budgets.get("max_ai_overviews", 1),
+                    pdf=budgets.get("max_pdf", 2)
                 )
             )
             logger.info(f"Controller: Registered budget for thread {thread_id}")
@@ -229,14 +237,16 @@ def node_controller(state: AgenticRunState) -> Dict[str, Any]:
                 "pages": rec.usage.pages,
                 "seconds": rec.usage.seconds,
                 "evidence_tokens": rec.usage.evidence_tokens,
-                "ai_overviews": rec.usage.ai_overviews
+                "ai_overviews": rec.usage.ai_overviews,
+                "pdf": rec.usage.pdf
             }
             budget_remaining = {
                 "max_queries": rec.budget.queries - rec.usage.queries,
                 "max_pages": rec.budget.pages - rec.usage.pages,
                 "max_seconds": rec.budget.seconds - rec.usage.seconds,
                 "max_evidence_tokens": rec.budget.evidence_tokens - rec.usage.evidence_tokens,
-                "max_ai_overviews": rec.budget.ai_overviews - rec.usage.ai_overviews
+                "max_ai_overviews": rec.budget.ai_overviews - rec.usage.ai_overviews,
+                "max_pdf": rec.budget.pdf - rec.usage.pdf
             }
         else:
             usage = state.get("usage", {})
@@ -262,7 +272,8 @@ def node_controller(state: AgenticRunState) -> Dict[str, Any]:
         budget_exhausted = (
             budget_remaining.get("max_queries", 0) <= 0 or
             budget_remaining.get("max_pages", 0) <= 0 or
-            budget_remaining.get("max_evidence_tokens", 0) <= 0
+            budget_remaining.get("max_evidence_tokens", 0) <= 0 or
+            budget_remaining.get("max_pdf", 0) <= 0
         )
 
         should_continue = True
@@ -369,7 +380,7 @@ If no finalize was called, synthesize based on all evidence collected throughout
 
 **Output Format (respond with valid JSON only):**
 {{{{
-  "answer": "4-6 sentence summary of findings",
+  "answer": "comprehensive summary of findings with as much detail as needed",
   "confidence": 0.0,
   "mapping_rationale": "explanation of range selection if applicable",
   "dp_value": "exact extracted value",
@@ -381,7 +392,7 @@ If no finalize was called, synthesize based on all evidence collected throughout
 }}}}
 
 **Field Requirements:**
-- answer: 4-6 sentences summarizing findings in non-technical language
+- answer: comprehensive summary in non-technical language (no length limit - provide as much detail as needed to fully address the datapoint)
 - confidence: number between 0.0-1.0 based on evidence strength
 - mapping_rationale: string explaining range selection
 - dp_value: string with exact extracted value

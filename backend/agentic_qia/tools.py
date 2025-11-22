@@ -382,7 +382,7 @@ async def finalize_tool(reasoning: str) -> Dict[str, str]:
         - When budget is nearly exhausted but key findings obtained
         - When confidence threshold reached for the datapoint
     """
-    logger.info(f"Finalize tool called: {reasoning[:100]}...")
+    logger.info(f"Finalize tool called: {reasoning}...")
     return {
         "action": "finalize",
         "reasoning": reasoning
@@ -492,7 +492,7 @@ TOOL_REGISTRY = {
             "description": "Extracted information as a string"
         },
         "budget_cost": {
-            "queries": 1,
+            "pdf": 1,
         },
         "use_cases": [
             "Extracting financial data from PDF reports",
@@ -1001,7 +1001,7 @@ def create_simple_tools():
         StructuredTool.from_function(
             func=finalize_sync,
             name="finalize",
-            description="Call when you have gathered sufficient evidence and are ready to conclude research. Provide a brief summary of your findings with the confidence.",
+            description="Call when you have gathered sufficient evidence and are ready to conclude research. Provide all your findings with reasoning.",
             args_schema=None,
         )
     ]

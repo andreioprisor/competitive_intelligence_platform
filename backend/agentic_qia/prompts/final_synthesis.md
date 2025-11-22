@@ -90,7 +90,7 @@ Return a JSON object with the following structure:
 
 ```json
 {
-  "answer": "[4-6 sentence answer with clear evidence synthesis]",
+  "answer": "[comprehensive answer with clear evidence synthesis - provide as much detail as needed]",
   "confidence": [0.0-1.0],
   "mapping_rationale": "[why this range was selected]",
   "dp_value": "[extracted value if applicable]",

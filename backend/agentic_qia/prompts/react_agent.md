@@ -41,7 +41,7 @@ For each step: **Thought** (reason) → **Action** (use tool) → **Observation*
 - `ai_overview(query)`: Quick summary from Google AI Search
    - Use at least once if stuck or for hard-to-crawl (Glassdoor, LinkedIn)
    - Useful for role verification to bypass LinkedIn scraping challenges
-- `finalize(reasoning)`: Make sure you ALWAYS call this tool at the end to produce final output
+- `finalize(reasoning)`: Make sure you ALWAYS call this tool at the end to produce final output. Provide comprehensive reasoning with all findings and evidence - no length limit.
 
 **Quality Standards**:
 - Verify company by domain ({{company_domain}}), name +
@@ -49,7 +49,7 @@ For each step: **Thought** (reason) → **Action** (use tool) → **Observation*
 - Track which URL each finding comes from
 - If a tool fails, try a different approach (don't retry same call blindly)
 - Stay in the budget limits for each tool. Never exceed {{max_serp}} serp queries (note that one batched serp tool call can consume multiple queries from the budget), {{max_crawl}} crawl calls, {{max_ai_overview}} ai_overview calls.
-- After you finished all instructions in the plan call finalize with the conclusions findings and confidence
+- After you finished all instructions in the plan call finalize with comprehensive conclusions, all findings, evidence sources, and confidence
 - ALWAYS follow the instructions and research plan, being budget-aware at each step
     - Ask yourself before each tool call: "Is this instruction aligned with the budget? Am I within limits? Will this help achieve the goal? Is it worth it?"
 - Some content might be in other languages than english. Translate as needed, don't skip useful foreign-language sources and data.
