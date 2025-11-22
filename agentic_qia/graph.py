@@ -3,8 +3,6 @@ LangGraph orchestration for agentic QIA with built-in ReAct agent
 """
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import create_react_agent
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_xai import ChatXAI
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage, RemoveMessage
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
