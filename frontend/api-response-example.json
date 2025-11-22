@@ -1,0 +1,167 @@
+{
+    "success": true,
+    "data": {
+        "company": {
+            "domain": "uipath.com",
+            "logoUrl": "https://logo.clearbit.com/uipath.com",
+            "description": "UiPath is a leading robotic process automation (RPA) software company.",
+            "domainOfActivity": "Robotic Process Automation (RPA) & AI",
+            "employees": "4,000+",
+            "differentiators": "End-to-end automation platform, strong community, AI-powered discovery.",
+            "services": "RPA Platform, Process Mining, Task Mining, Document Understanding",
+            "geography": "Global (North America, Europe, Asia Pacific)",
+            "marketShare": "35%",
+            "growthRate": "15% YoY",
+            "marketCap": "$10.4B",
+            "revenue": "$1.1B",
+            "foundedYear": 2005,
+            "strategies": [
+                "Market Expansion",
+                "Product Innovation",
+                "Strategic Acquisitions",
+                "Cloud-First Approach"
+            ]
+        },
+        "competitors": [
+            {
+                "name": "Automation Anywhere",
+                "logoUrl": "https://logo.clearbit.com/automationanywhere.com",
+                "description": "A developer of robotic process automation software.",
+                "category": "Direct",
+                "employees": "3,000+",
+                "marketCap": "$6.8B",
+                "revenue": "$600M",
+                "foundedYear": 2003,
+                "strategies": [
+                    "Cloud-Native Platform",
+                    "AI Integration"
+                ],
+                "solutions": [
+                    "Automation 360",
+                    "IQ Bot",
+                    "Bot Insight"
+                ]
+            },
+            {
+                "name": "Blue Prism",
+                "logoUrl": "https://logo.clearbit.com/blueprism.com",
+                "description": "Intelligent automation platform for enterprise.",
+                "category": "Direct",
+                "employees": "2,500+",
+                "marketCap": "$1.5B",
+                "revenue": "$200M",
+                "foundedYear": 2001,
+                "strategies": [
+                    "Enterprise Focus",
+                    "Security-First"
+                ],
+                "solutions": [
+                    "Blue Prism Platform",
+                    "Decipher IDP",
+                    "Process Intelligence"
+                ]
+            },
+            {
+                "name": "Microsoft Power Automate",
+                "logoUrl": "https://logo.clearbit.com/microsoft.com",
+                "description": "Low-code automation platform integrated with Microsoft 365.",
+                "category": "Indirect",
+                "employees": "221,000+",
+                "marketCap": "$3.1T",
+                "revenue": "$211B",
+                "foundedYear": 1975,
+                "strategies": [
+                    "Ecosystem Integration",
+                    "Low-Code"
+                ],
+                "solutions": [
+                    "Power Automate Desktop",
+                    "Power Automate Cloud",
+                    "AI Builder"
+                ]
+            }
+        ],
+        "solutions": [
+            {
+                "name": "Finance Automation",
+                "industries": [
+                    "Banking",
+                    "Insurance",
+                    "FinTech"
+                ],
+                "partners": [
+                    "Deloitte",
+                    "PwC",
+                    "KPMG"
+                ]
+            },
+            {
+                "name": "Healthcare Bot",
+                "industries": [
+                    "Hospitals",
+                    "Pharmaceuticals"
+                ],
+                "partners": [
+                    "Cerner",
+                    "Epic"
+                ]
+            },
+            {
+                "name": "Supply Chain Optimizer",
+                "industries": [
+                    "Logistics",
+                    "Retail",
+                    "Manufacturing"
+                ],
+                "partners": [
+                    "SAP",
+                    "Oracle"
+                ]
+            },
+            {
+                "name": "HR Onboarding Assistant",
+                "industries": [
+                    "All Industries"
+                ],
+                "partners": [
+                    "Workday",
+                    "ADP"
+                ]
+            }
+        ],
+        "timeline": [
+            {
+                "id": 1,
+                "competitor": "Microsoft Power Automate",
+                "channel": "News Search",
+                "title": "Microsoft announces Power Automate Desktop now free for Windows 11 users",
+                "description": "Microsoft has made Power Automate Desktop available at no additional cost for all Windows 11 users, expanding its automation capabilities to millions of devices.",
+                "date": "2025-11-20T10:30:00Z",
+                "source": "TechCrunch"
+            },
+            {
+                "id": 2,
+                "competitor": "Automation Anywhere",
+                "channel": "Jobs Posting",
+                "title": "Automation Anywhere hiring 50+ engineers in India",
+                "description": "Multiple job postings indicate Automation Anywhere is expanding its R&D team in Bangalore, focusing on AI and machine learning capabilities.",
+                "date": "2025-11-19T14:20:00Z",
+                "source": "LinkedIn Jobs"
+            },
+            {
+                "id": 3,
+                "competitor": "Blue Prism",
+                "channel": "Pricing Intelligence",
+                "title": "Blue Prism reduces enterprise license pricing by 15%",
+                "description": "Competitive pricing analysis shows Blue Prism has lowered its enterprise tier pricing, likely in response to market pressure.",
+                "date": "2025-11-18T09:15:00Z",
+                "source": "Pricing Monitor"
+            }
+        ]
+    },
+    "metadata": {
+        "timestamp": "2025-11-22T18:30:43Z",
+        "version": "1.0",
+        "requestId": "req_abc123xyz"
+    }
+}
