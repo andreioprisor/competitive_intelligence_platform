@@ -132,7 +132,7 @@ class SerpAdapter:
             List of search results
         """
         try:
-            from leadora.adapters.agentic_adapters.api_crawlers import ScrapingDogClient
+            from ..agentic_adapters.api_crawlers import ScrapingDogClient
 
             logger.info(f"Using ScrapingDog fallback for query: '{query}'", extra=self._get_log_extra())
             scraping_dog = ScrapingDogClient()

@@ -10,6 +10,9 @@ from redis.asyncio import Redis
 import html2text
 import logging
 # BeautifulSoup for HTML parsing
+
+logger = logging.getLogger(__name__)
+
 try:
     from bs4 import BeautifulSoup
     HAS_BS4 = True
@@ -17,7 +20,6 @@ except ImportError:
     HAS_BS4 = False
     logger.warning("BeautifulSoup4 not installed. HTML parsing for AI Overview will not be available. Install with: pip install beautifulsoup4")
 
-logger = logging.getLogger(__name__)
 
 
 # Redis Fixed Window Rate Limiter for distributed RPS control

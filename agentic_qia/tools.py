@@ -692,7 +692,7 @@ def create_simple_tools():
     """
     import asyncio
     import json
-    from langchain.tools import StructuredTool
+    from langchain_core.tools import StructuredTool
     from typing import List
 
     def serp_sync(queries: List[str]) -> str:

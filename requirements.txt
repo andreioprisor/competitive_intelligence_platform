@@ -45,9 +45,7 @@ rq>=1.15.0
 # Database
 alembic>=1.8.0
 
-google-cloud-tasks
-
 html2text
-langchain-core>=0.3.0,<1.0.0
-langchain>=0.3.0
+langchain-core
+langchain
 langchain-openai
