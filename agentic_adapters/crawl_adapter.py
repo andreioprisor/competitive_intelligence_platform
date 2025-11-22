@@ -874,3 +874,56 @@ class CrawlAdapter:
 
         # Note: BrightDataClient doesn't have persistent connections to clean up
         logger.debug("CrawlAdapter cleanup completed")
+
+
+if __name__ == "__main__":
+    import sys
+    from pythonjsonlogger import jsonlogger
+    def setup_logging(json_format: bool = True, level: int = logging.INFO):
+        """Configure the root logger once for the worker service."""
+        root_logger = logging.getLogger()
+        root_logger.setLevel(level)
+        for handler in list(root_logger.handlers):
+            root_logger.removeHandler(handler)
+        handler = logging.StreamHandler(sys.stdout)
+        if json_format:
+            formatter = jsonlogger.JsonFormatter(
+                fmt="%(asctime)s %(levelname)s %(name)s %(message)s %(filename)s %(funcName)s %(lineno)d",
+                rename_fields={
+                    "levelname": "level",
+                    "asctime": "timestamp",
+                    "filename": "file",
+                    "funcName": "function",
+                    "lineno": "line",
+                },
+            )
+        else:
+            formatter = logging.Formatter(
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            )
+        handler.setFormatter(formatter)
+        root_logger.addHandler(handler)
+        logging.info(
+            "Logging initialized", extra={"format": "json" if json_format else "standard"}
+        ) 
+    import asyncio
+    setup_logging(json_format=True, level=logging.INFO)
+
+    async def test_crawl():
+        adapter = CrawlAdapter()
+
+        test_urls = [
+            "https://www.emag.ro",
+        ]
+
+        results = await adapter.crawl_pages(test_urls)
+        for res in results:
+            print(f"URL: {res['url']}")
+            print(f"Success: {res['success']}")
+            print(f"Error: {res['error']}")
+            print(f"Markdown length: {len(res['deduplicated_markdown'])}")
+            print("-" * 40)
+
+        await adapter.cleanup()
+
+    asyncio.run(test_crawl())

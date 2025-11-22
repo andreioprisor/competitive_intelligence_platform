@@ -368,8 +368,7 @@ class ScrapingDogClient:
         # Apply rate limiting if available
         if self.rate_limiter:
             await self.rate_limiter.acquire()
-        else:
-            raise RuntimeError("Rate limiter not initialized, cannot proceed with async scraping")
+        # If no rate limiter, proceed without it
 
         return await asyncio.to_thread(self.scrape_page, url, js_rendering)
     
@@ -388,8 +387,7 @@ class ScrapingDogClient:
         # Apply rate limiting if available
         if self.rate_limiter:
             await self.rate_limiter.acquire()
-        else:
-            raise RuntimeError("Rate limiter not initialized, cannot proceed with async AI overview")
+        # If no rate limiter, proceed without it
 
         return await asyncio.to_thread(self.get_ai_overview, query, country, return_html)
 
