@@ -49,6 +49,51 @@ async def pdf_tool(
         logger.error(f"PDF tool failed: {e}")
         return f"Error processing PDF: {str(e)}"
     
+async def google_ads_tool(
+    domain: str,
+    region: str = "RO",
+    results_limit: int = 100, 
+    period_days: int = 4
+) -> List[Dict[str, Any]]:
+    """
+    Search and scrape Google Ads Transparency data for a given domain.
+
+    Args:
+        domain: Domain to search for (e.g., "hubspot.com")
+        region: Region code for ads (default: "RO")
+        results_limit: Maximum number of ads to retrieve (default: 10)
+        period_days: Time period in days to look back for ads (default: 30)
+    Returns:
+        List of ad variations with details
+    Budget Impact:
+        - Queries: 1 (for advertiser search)
+    Implementation:
+        - Uses GoogleAdsScraperPipeline from agentic_adapters
+        - Searches for advertiser ID via SerpAPI
+        - Scrapes ads using Apify actor
+    """
+    from agentic_adapters.google_adds_adapter import GoogleAdsScraperPipeline
+
+    scraper = GoogleAdsScraperPipeline()
+    try:
+        logger.info(f"Google Ads tool: Searching advertiser for domain {domain} in region {region}")
+        advertiser_info = await scraper.search_advertiser(domain=domain, region=region)
+
+        logger.info(f"Google Ads tool: Scraping ads for advertiser ID {advertiser_info['advertiser_id']}")
+        ads = await scraper.scrape_ads(
+            advertiser_id=advertiser_info["advertiser_id"],
+            region=region,
+            results_limit=results_limit,
+            preset_date=f"Last+{period_days}+days"
+        )
+
+        logger.info(f"Google Ads tool: Retrieved {len(ads)} ads for domain {domain}")
+        return ads
+
+    except Exception as e:
+        logger.error(f"Google Ads tool failed: {e}")
+        return [{"error": str(e)}]
+    
     
 async def serp_tool(
     queries: List[str]
@@ -459,6 +504,50 @@ TOOL_REGISTRY = {
             "query": "Extract financial summary"
         }
     },
+    "google_ads": {
+        "function": google_ads_tool,
+        "description": "Search and scrape Google Ads Transparency data for a given domain. Searches for the advertiser ID via SerpAPI and scrapes ads using an Apify actor.",
+        "parameters": {
+            "domain": {
+                "type": "string",
+                "required": True,
+                "description": "Domain to search for (e.g., 'hubspot.com')"
+            },
+            "region": {
+                "type": "string",
+                "required": False,
+                "description": "Region code for ads (default: 'RO')"
+            },
+            "results_limit": {
+                "type": "integer",
+                "required": False,
+                "description": "Maximum number of ads to retrieve (default: 10)"
+            },
+            "period_days": {
+                "type": "integer",
+                "required": False,
+                "description": "Time period in days to look back for ads (default: 30)"
+            }
+        },
+        "returns": {
+            "type": "array",
+            "description": "List of ad variations with details"
+        },
+        "budget_cost": {
+            "queries": 1,
+        },
+        "use_cases": [
+            "Gathering competitive advertising data",
+            "Analyzing ad creatives and messaging",
+            "Tracking competitor ad spend and strategies"
+        ],
+        "example": {
+            "domain": "hubspot.com",
+            "region": "RO",
+            "results_limit": 100,
+            "period_days": 4
+        },
+    },
     "serp": {
         "function": serp_tool,
         "description": "Search the web using multiple Google Search queries in parallel. IMPORTANT: This tool accepts a LIST of queries (not a single query) and executes them simultaneously. Use this to efficiently gather information from multiple search angles at once. Returns formatted text with query groups and markdown-linked results in Google SERP style, making it easy to read and select URLs for crawling. Company context and datapoint context are automatically provided from the current research task.",
@@ -766,6 +855,22 @@ def create_simple_tools():
         result = asyncio.run(pdf_tool(url, query))
         return result
     
+    def google_ads_sync(
+        domain: str,
+        region: str = "RO",
+        results_limit: int = 100,
+        period_days: int = 4
+    ) -> str:
+        """Search and scrape Google Ads Transparency data for a given domain."""
+        result = asyncio.run(google_ads_tool(
+            domain=domain,
+            region=region,
+            results_limit=results_limit,
+            period_days=period_days
+        ))
+        return json.dumps(result)
+    
+    
     def serp_sync(queries: List[str]) -> str:
         """
         Search Google using multiple queries in parallel.
@@ -864,6 +969,12 @@ def create_simple_tools():
             args_schema=None,  # Will be inferred from type hints
         ),
         StructuredTool.from_function(
+            func=google_ads_sync,
+            name="google_ads",
+            description=TOOL_REGISTRY["google_ads"]["description"],
+            args_schema=None,  # Will be inferred from type hints
+        ),
+        StructuredTool.from_function(
             func=serp_sync,
             name="serp",
             description=TOOL_REGISTRY["serp"]["description"],
@@ -914,6 +1025,7 @@ def create_async_tools() -> List:
     """
     return [
         pdf_tool, 
+        google_ads_tool,  # No state injection needed
         serp_tool,       # Has InjectedState for company_context/datapoint_definition
         crawl_tool,      # No state injection needed
         extract_links_tool,  # No state injection needed
