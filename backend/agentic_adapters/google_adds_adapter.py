@@ -20,7 +20,7 @@ class GoogleAdsScraperPipeline:
             serpapi_key: SerpAPI key (if None, loads from env)
             apify_token: Apify API token (if None, loads from env)
         """
-        self.serpapi_key = os.getenv("SERPER_API_KEY")
+        self.serpapi_key = os.getenv("SERPAPI_API_KEY")
         self.apify_token = os.getenv("APIFY_API_TOKEN")
         self.apify_client = ApifyClient(self.apify_token)
     
@@ -106,6 +106,8 @@ class GoogleAdsScraperPipeline:
         for item in self.apify_client.dataset(run["defaultDatasetId"]).iterate_items():
             if "variations" in item:
                 results.append(item["variations"])
+
+        print(results)
         return results
     
     
