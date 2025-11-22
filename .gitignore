@@ -1,4 +1,6 @@
 .env
 hackaton_env/
+output/
+__pycache__/
 *venv/
 *__pycache__/
