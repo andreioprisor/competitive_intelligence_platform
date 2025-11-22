@@ -212,7 +212,7 @@ Company Domain: {domain}
         # Get the response from Gemini with Google Search
         response = gemini_api.get_google_search_response(
             prompt=search_query,
-            model_name="gemini-2.5-pro",
+            model_name="gemini-3.0-pro",
             thinking_budget=2000,
             temperature=0.7
         )
@@ -271,7 +271,7 @@ Generate the JSON array of enhanced solution profiles according to the FINAL OUT
         # Get the response from Gemini with Google Search
         response = gemini_api.get_google_search_response(
             prompt=search_query,
-            model_name="gemini-2.5-pro",
+            model_name="gemini-3.0-pro",
             thinking_budget=3000,
             temperature=0.7
         )
@@ -425,9 +425,9 @@ async def profile_competitors_solution(
         example="stripe.com"
     ),
     model: str = Query(
-        "gemini-2.5-pro",
+        "gemini-3.0-pro",
         description="Gemini model to use",
-        example="gemini-2.5-pro"
+        example="gemini-3.0-pro"
     ),
     db: Session = Depends(get_db)
 ) -> ProfileCompetitorsSolutionResponse:

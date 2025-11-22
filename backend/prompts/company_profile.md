@@ -216,9 +216,16 @@ Return **only** a JSON object matching exactly:
       "company_name": "Competitor Corp",
       "website": "competitor.com",
       "location": "San Francisco, USA",
-      "type": "direct"
+      "type": "direct/indirect/emergent"
     }
   ],
+  "market_context": {
+    "addressed_geography": ["Geography were the company operates"],
+    "competitive_advantages": ["Validated with external sources"],
+    "industry_trends": ["Added from market research"],
+    "regulatory_environment": ["Enhanced with industry knowledge"],
+    "current_challenges": ["Inferred from market analysis"]
+  },
   "enhanced_confidence": {
     "core_business": 0.0,
     "key_clients": 0.0,
@@ -255,5 +262,5 @@ LinkedIn Data
 # FINAL_INSTRUCTION
 
 1. Use website_crawler_data and linkedin_company_data to synthesize the initial profile.
-2. Apply the **Research Strategy** with Web Search Grounding to validate/fill **competitors**, plus any other **TFO/low-confidence** fields.
+2. Apply the **Research Strategy** with Web Search Grounding to validate/fill **market_context**, **competitors**, plus any other **TFO/low-confidence** fields.
 3. Output **only** the final JSON object in **OUTPUT_STRUCTURE**—no extra text.
