@@ -94,7 +94,7 @@ class ReactGraph:
             raise ValueError("OPENROUTER_API_KEY environment variable not set")
 
         self.llm = ChatOpenAI(
-            model="google/gemini-2.5-flash-preview-09-2025",
+            model="openai/gpt-5.1",
             api_key=api_key,
             base_url="https://openrouter.ai/api/v1",
             temperature=0,
@@ -871,20 +871,20 @@ if __name__ == "__main__":
 
     # Create ReactGraph with company and datapoint context
     company_context = {
-        "name": "eMAG",
-        "domain": "emag.ro",
-        "industry": "E-commerce",
-        "size": "2000-5000 employees"
+        "name": "NVIDIA Corporation",
+        "domain": "nvidia.com",
+        "industry": "Semiconductors / AI Hardware",
+        "size": "10000+ employees"
     }
 
     datapoint_context = {
-        "dp_name": "Cloud Technologies In job descriptions",
-        "definition": "Cloud technologies mentioned in job descriptions for cloud engineering roles at the company.",
+        "dp_name": "Q3 FY2025 Revenue and Data Center Growth",
+        "definition": "NVIDIA's total revenue for Q3 FY2025 (ending October 2025) and a comprehensive breakdown of what drove this revenue.",
         "value_ranges": {
-            "bad": "No information found",
-            "average": "Some generic cloud technologies mentioned without specifics.",
-            "good": "either GOOGLE CLOUD  or AZURE or AWS",
-            "best": "all of GOOGLE CLOUD, AZURE, and AWS are mentioned specifically."
+            "bad": "No earnings data found or outdated information",
+            "average": "Total revenue mentioned but missing data center segment breakdown",
+            "good": "Both total revenue and data center revenue clearly stated with growth percentages",
+            "best": "Detailed breakdown including total revenue, data center revenue, sequential and YoY growth rates, and GPU sales metrics"
         }
     }
 

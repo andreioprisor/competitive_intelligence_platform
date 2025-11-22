@@ -76,7 +76,7 @@ class PDFAdapter:
                 upload_op = client.operations.get(upload_op)
                 logger.debug("PDFAdapter: Waiting for upload to complete...")
 
-            logger.info("PDFAdapter: Upload complete, executing query")
+            logger.info(f"PDFAdapter: Upload complete, executing query: '{query[:100]}...'")
 
             # Query the PDF using the provided query parameter
             response = client.models.generate_content(
@@ -93,6 +93,7 @@ class PDFAdapter:
 
             result_text = response.text
             logger.info(f"PDFAdapter: Query successful, result length: {len(result_text)} chars")
+            logger.info(f"PDFAdapter: Gemini response: {result_text}")
             return result_text
 
         except Exception as e:
@@ -111,7 +112,24 @@ class PDFAdapter:
             # Cleanup File Search Store
             if client and store:
                 try:
+                    # First, list and delete all files in the store
+                    try:
+                        # List files using the correct API
+                        files = client.files.list(filter=f"file_search_stores/{store.name.split('/')[-1]}")
+
+                        # Delete each file
+                        for file in files:
+                            try:
+                                client.files.delete(name=file.name)
+                                logger.debug(f"PDFAdapter: Deleted file {file.name}")
+                            except Exception as file_err:
+                                logger.warning(f"PDFAdapter: Failed to delete file {file.name}: {file_err}")
+                    except Exception as list_err:
+                        logger.debug(f"PDFAdapter: Could not list/delete files: {list_err}")
+
+                    # Now delete the store (may still fail if files weren't deleted)
                     client.file_search_stores.delete(name=store.name)
-                    logger.info("PDFAdapter: Deleted File Search Store")
+                    logger.info("PDFAdapter: Deleted File Search Store successfully")
                 except Exception as e:
-                    logger.warning(f"PDFAdapter: Failed to delete File Search Store: {e}")
+                    # This is non-critical - Google will eventually clean up old stores
+                    logger.debug(f"PDFAdapter: Could not delete File Search Store (non-critical): {e}")
