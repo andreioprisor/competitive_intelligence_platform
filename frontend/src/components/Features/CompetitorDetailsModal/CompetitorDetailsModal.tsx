@@ -154,9 +154,9 @@ export function CompetitorDetailsModal({ opened, onClose, competitor, competitor
                                         {solutions.map((solution: any, index: number) => (
                                             <div key={index} style={{
                                                 padding: '12px',
-                                                border: '1px solid #e0e0e0',
+                                                border: '1px solid var(--mantine-color-default-border)',
                                                 borderRadius: '8px',
-                                                backgroundColor: '#f9f9f9'
+                                                backgroundColor: 'var(--mantine-color-body)'
                                             }}>
                                                 <Text size="sm" fw={600} mb="xs">{solution.solution_name}</Text>
 
