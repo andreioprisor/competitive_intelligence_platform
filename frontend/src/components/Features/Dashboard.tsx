@@ -9,6 +9,7 @@ import { SolutionComparison } from './SolutionComparison/SolutionComparison';
 import { Timeline } from './Timeline/Timeline';
 import { UserPreferences } from './UserPreferences/UserPreferences';
 import { AddSolutionModal } from './AddSolutionModal/AddSolutionModal';
+import { AddCompetitorModal } from './AddCompetitorModal/AddCompetitorModal';
 import { CompetitorDetailsModal } from './CompetitorDetailsModal/CompetitorDetailsModal';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { DropResult } from '@hello-pangea/dnd';
@@ -29,6 +30,7 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
     const [isSaved, setIsSaved] = useState(false);
     const [solutions, setSolutions] = useState(initialSolutions);
     const [addSolutionModalOpened, setAddSolutionModalOpened] = useState(false);
+    const [addCompetitorModalOpened, setAddCompetitorModalOpened] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(true);
     const [selectedCompetitor, setSelectedCompetitor] = useState<typeof competitors[0] | null>(null);
     const [backendCompetitors, setBackendCompetitors] = useState<CompetitorData[]>([]);
@@ -206,6 +208,41 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
             console.log('Solution saved successfully:', newSolution);
         } catch (error) {
             console.error('Failed to save solution:', error);
+            // TODO: Show error notification and revert state
+        }
+    };
+
+    const handleAddCompetitor = async (newCompetitor: any) => {
+        try {
+            // Transform the competitor data to match CompetitorData interface
+            const competitorData: CompetitorData = {
+                name: newCompetitor.name,
+                logoUrl: '',
+                description: newCompetitor.description,
+                strategies: [],
+                category: newCompetitor.category,
+                website: newCompetitor.website,
+                location: newCompetitor.location
+            };
+
+            // Add to local state immediately for UI responsiveness
+            setColumns(prev => ({
+                ...prev,
+                [newCompetitor.category]: [...prev[newCompetitor.category], competitorData]
+            }));
+
+            // Call backend API to save competitor
+            await api.addCompetitor(companyData.domain, {
+                competitor: {
+                    domain: newCompetitor.domain,
+                    name: newCompetitor.name,
+                    solutions: []
+                }
+            });
+
+            console.log('Competitor added successfully:', newCompetitor);
+        } catch (error) {
+            console.error('Failed to add competitor:', error);
             // TODO: Show error notification and revert state
         }
     };
@@ -410,10 +447,26 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
                         </Grid>
                     </DragDropContext>
 
+                    <Button
+                        leftSection={<IconPlus size={16} />}
+                        onClick={() => setAddCompetitorModalOpened(true)}
+                        mt="xl"
+                        size="md"
+                        variant="light"
+                    >
+                        Add Competitor
+                    </Button>
+
                     <CompetitorDetailsModal
                         opened={selectedCompetitor !== null}
                         onClose={() => setSelectedCompetitor(null)}
                         competitor={selectedCompetitor}
+                    />
+
+                    <AddCompetitorModal
+                        opened={addCompetitorModalOpened}
+                        onClose={() => setAddCompetitorModalOpened(false)}
+                        onAdd={handleAddCompetitor}
                     />
                 </Tabs.Panel>
 
