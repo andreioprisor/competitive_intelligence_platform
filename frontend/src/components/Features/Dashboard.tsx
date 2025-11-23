@@ -266,6 +266,31 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
         }
     };
 
+    const handleDeleteCompetitor = async (competitor: CompetitorData, category: string) => {
+        try {
+            // Remove from local state immediately for UI responsiveness
+            setColumns(prev => ({
+                ...prev,
+                [category]: prev[category].filter(c => c.name !== competitor.name)
+            }));
+
+            // Call backend API to delete competitor
+            // Use website as domain identifier (which should be the domain)
+            const competitorDomain = competitor.website || competitor.name;
+            await api.deleteCompetitor(companyData.domain, competitorDomain);
+
+            console.log('Competitor deleted successfully:', competitor.name);
+        } catch (error) {
+            console.error('Failed to delete competitor:', error);
+            // Revert state on error - re-add the competitor
+            setColumns(prev => ({
+                ...prev,
+                [category]: [...prev[category], competitor]
+            }));
+            // TODO: Show error notification
+        }
+    };
+
     const handleCloseInfoModal = () => {
         setShowInfoModal(false);
     };
@@ -397,6 +422,7 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
                                                             <CompetitorCard
                                                                 data={competitor}
                                                                 onClick={() => setSelectedCompetitor(competitor)}
+                                                                onDelete={() => handleDeleteCompetitor(competitor, 'Direct')}
                                                             />
                                                         </div>
                                                     )}
@@ -425,6 +451,7 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
                                                             <CompetitorCard
                                                                 data={competitor}
                                                                 onClick={() => setSelectedCompetitor(competitor)}
+                                                                onDelete={() => handleDeleteCompetitor(competitor, 'Indirect')}
                                                             />
                                                         </div>
                                                     )}
@@ -453,6 +480,7 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
                                                             <CompetitorCard
                                                                 data={competitor}
                                                                 onClick={() => setSelectedCompetitor(competitor)}
+                                                                onDelete={() => handleDeleteCompetitor(competitor, 'Emerging')}
                                                             />
                                                         </div>
                                                     )}

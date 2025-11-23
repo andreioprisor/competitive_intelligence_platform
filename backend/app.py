@@ -666,6 +666,39 @@ async def add_competitor(
     return {"status": "success", "message": "Competitor added/updated"}
 
 
+@app.delete("/competitors")
+async def delete_competitor(
+    domain: str = Query(..., description="The domain of the company"),
+    competitor_domain: str = Query(..., description="The domain of the competitor to delete"),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a competitor for a company.
+    """
+    clean_domain_str = clean_domain(domain)
+    company = db.query(Company).filter(Company.domain == clean_domain_str).first()
+
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    clean_competitor_domain = clean_domain(competitor_domain)
+
+    # Find the competitor
+    competitor = db.query(Competitor).filter(
+        Competitor.company_id == company.id,
+        Competitor.domain == clean_competitor_domain
+    ).first()
+
+    if not competitor:
+        raise HTTPException(status_code=404, detail="Competitor not found")
+
+    # Delete the competitor
+    db.delete(competitor)
+    db.commit()
+
+    return {"status": "success", "message": f"Competitor {clean_competitor_domain} deleted successfully"}
+
+
 @app.post("/category_observed")
 async def record_category_observation(
     request: CategoryObservationRequest,

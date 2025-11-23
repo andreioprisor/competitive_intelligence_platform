@@ -147,6 +147,21 @@ export const api = {
         return response.json();
     },
 
+    async deleteCompetitor(domain: string, competitorDomain: string): Promise<{ status: string; message: string }> {
+        const response = await fetch(
+            `${API_BASE_URL}/competitors?domain=${encodeURIComponent(domain)}&competitor_domain=${encodeURIComponent(competitorDomain)}`,
+            {
+                method: 'DELETE',
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(`API call failed: ${response.statusText}`);
+        }
+
+        return response.json();
+    },
+
     async recordCategoryObservation(domain: string, data: CategoryObservationRequest): Promise<CategoryObservationResponse> {
         const response = await fetch(`${API_BASE_URL}/category_observed?domain=${encodeURIComponent(domain)}`, {
             method: 'POST',
