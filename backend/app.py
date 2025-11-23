@@ -157,6 +157,35 @@ class EnrichCompetitorsResponse(BaseModel):
     execution_time_seconds: float = Field(..., description="Total execution time in seconds")
 
 
+class TimelineRequest(BaseModel):
+    """Request model for timeline endpoint with filtering options."""
+    company_domain: str = Field(..., description="Company domain (required) to get all competitors for that company")
+    competitor_domains: Optional[List[str]] = Field(None, description="Filter by competitor domain(s)")
+    criteria_names: Optional[List[str]] = Field(None, description="Filter by criteria name(s)")
+    concern_levels: Optional[List[int]] = Field(None, description="Filter by concern level(s) from value JSONB field (1-5, where 5 is most critical)")
+    start_date: Optional[datetime] = Field(None, description="Filter from date (inclusive)")
+    end_date: Optional[datetime] = Field(None, description="Filter to date (inclusive)")
+    limit: Optional[int] = Field(100, description="Maximum number of results to return", ge=1, le=1000)
+
+
+class TimelineItem(BaseModel):
+    """Individual timeline item with value data and joined relationships."""
+    id: int = Field(..., description="Value record ID")
+    criteria_id: int = Field(..., description="Criteria ID")
+    criteria_name: str = Field(..., description="Criteria name")
+    competitor_id: int = Field(..., description="Competitor ID")
+    competitor_domain: str = Field(..., description="Competitor domain")
+    value: Dict[str, Any] = Field(..., description="Value data (JSONB)")
+    created_at: datetime = Field(..., description="Timestamp when value was created")
+
+
+class TimelineResponse(BaseModel):
+    """Response model for timeline endpoint."""
+    success: bool = Field(..., description="Whether the request was successful")
+    total_count: int = Field(..., description="Total number of items matching filters")
+    items: List[TimelineItem] = Field(..., description="Timeline items ordered by created_at DESC")
+
+
 def load_prompt_template(prompt_name: str) -> str:
     """Load a prompt template from the prompts directory."""
     prompt_path = PROMPTS_DIR / prompt_name
@@ -1174,6 +1203,119 @@ async def enrich_competitors(
         raise HTTPException(
             status_code=500,
             detail=f"Error enriching competitors: {str(e)}"
+        )
+
+
+@app.post(
+    "/timeline",
+    response_model=TimelineResponse,
+    summary="Get Timeline of Value Records with Filtering",
+    description="Retrieve a timeline of Value records with optional filters for competitor domains, criteria names, and date ranges"
+)
+async def get_timeline(
+    request: TimelineRequest,
+    db: Session = Depends(get_db)
+) -> TimelineResponse:
+    """
+    Get timeline of Value records with filtering.
+
+    This endpoint:
+    1. Accepts optional filters for competitor domains, criteria names, and date ranges
+    2. Queries Value table with joins to Criteria and Competitor
+    3. Applies filters conditionally
+    4. Returns chronologically ordered results (newest first)
+
+    Args:
+        request: TimelineRequest with optional filters
+        db: Database session (injected)
+
+    Returns:
+        TimelineResponse: Timeline items with joined data
+
+    Raises:
+        HTTPException: If query fails
+    """
+    try:
+        logger.info(f"Received timeline request with filters: {request.model_dump()}")
+
+        # Validate that company exists
+        company = db.query(Company).filter_by(domain=request.company_domain).first()
+        if not company:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Company not found for domain: {request.company_domain}"
+            )
+        logger.info(f"Found company: {company.profile.get('name', request.company_domain)} (ID: {company.id})")
+
+        # Build base query with joins - filter by company domain
+        query = db.query(Value).join(Criteria).join(Competitor).join(
+            Company, Competitor.company_id == Company.id
+        ).filter(Company.domain == request.company_domain)
+
+        logger.info(f"Filtering by company domain: {request.company_domain}")
+
+        # Apply additional filters conditionally
+        if request.competitor_domains:
+            query = query.filter(Competitor.domain.in_(request.competitor_domains))
+            logger.info(f"Filtering by competitor domains: {request.competitor_domains}")
+
+        if request.criteria_names:
+            query = query.filter(Criteria.name.in_(request.criteria_names))
+            logger.info(f"Filtering by criteria names: {request.criteria_names}")
+
+        if request.concern_levels:
+            # Filter by concern_level field in JSONB value column (numeric 1-5)
+            from sqlalchemy import cast, Integer
+            query = query.filter(cast(Value.value['concern_level'], Integer).in_(request.concern_levels))
+            logger.info(f"Filtering by concern levels: {request.concern_levels}")
+
+        if request.start_date:
+            query = query.filter(Value.created_at >= request.start_date)
+            logger.info(f"Filtering from date: {request.start_date}")
+
+        if request.end_date:
+            query = query.filter(Value.created_at <= request.end_date)
+            logger.info(f"Filtering to date: {request.end_date}")
+
+        # Order by created_at DESC (newest first)
+        query = query.order_by(Value.created_at.desc())
+
+        # Get total count before limit
+        total_count = query.count()
+
+        # Apply limit
+        query = query.limit(request.limit)
+
+        # Execute query
+        results = query.all()
+
+        # Map to TimelineItem objects
+        items = [
+            TimelineItem(
+                id=value.id,
+                criteria_id=value.criteria_id,
+                criteria_name=value.criteria.name,
+                competitor_id=value.competitor_id,
+                competitor_domain=value.competitor.domain,
+                value=value.value,
+                created_at=value.created_at
+            )
+            for value in results
+        ]
+
+        logger.info(f"Timeline query returned {len(items)} items (total matching: {total_count})")
+
+        return TimelineResponse(
+            success=True,
+            total_count=total_count,
+            items=items
+        )
+
+    except Exception as e:
+        logger.error(f"Error in timeline endpoint: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error retrieving timeline: {str(e)}"
         )
 
 

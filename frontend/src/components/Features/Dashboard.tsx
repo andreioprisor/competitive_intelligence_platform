@@ -27,11 +27,9 @@ interface DashboardProps {
 }
 
 export function Dashboard({ companyData, apiResponse, solutions: initialSolutions, competitors }: DashboardProps) {
-    const [isSaved, setIsSaved] = useState(false);
     const [solutions, setSolutions] = useState(initialSolutions);
     const [addSolutionModalOpened, setAddSolutionModalOpened] = useState(false);
     const [addCompetitorModalOpened, setAddCompetitorModalOpened] = useState(false);
-    const [showInfoModal, setShowInfoModal] = useState(true);
     const [selectedCompetitor, setSelectedCompetitor] = useState<typeof competitors[0] | null>(null);
     const [selectedCompetitorSolutions, setSelectedCompetitorSolutions] = useState<any>(null);
     const [backendCompetitors, setBackendCompetitors] = useState<CompetitorData[]>([]);
@@ -46,27 +44,32 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
         Emerging: competitors.filter(c => c.category === 'Emerging'),
     }));
 
-    // Load competitors from backend when component mounts and company is saved
+    // Enrich competitors when Competitors tab becomes active
     useEffect(() => {
-        if (!isSaved) return;
+        if (activeTab === 'competitors') {
+            const enrichCompetitors = async () => {
+                setLoadingCompetitors(true);
+                try {
+                    console.log('Enriching competitors...');
+                    const response = await api.enrichCompetitors({ domain: companyData.domain });
+                    console.log('Competitors enriched:', response);
 
-        const loadCompetitors = async () => {
-            try {
-                const competitorsFromBackend = await api.getCompetitors(companyData.domain);
-                console.log('Loaded competitors from backend:', competitorsFromBackend);
+                    // After enrichment, fetch updated competitors
+                    const competitorsFromBackend = await api.getCompetitors(companyData.domain);
+                    console.log('Loaded competitors from backend:', competitorsFromBackend);
 
-                // Transform backend format to CompetitorData format
-                const transformedCompetitors: CompetitorData[] = competitorsFromBackend.map(comp => ({
-                    name: comp.domain,
-                    logoUrl: `https://logo.clearbit.com/${comp.domain}`,
-                    description: `Competitor: ${comp.domain}`,
-                    strategies: [],
-                    category: 'Direct', // Default category
-                    website: comp.domain,
-                    location: 'Unknown'
-                }));
+                    // Transform backend format to CompetitorData format
+                    const transformedCompetitors: CompetitorData[] = competitorsFromBackend.map(comp => ({
+                        name: comp.domain,
+                        logoUrl: '',
+                        description: `Competitor: ${comp.domain}`,
+                        strategies: [],
+                        category: 'Direct', // Default category
+                        website: comp.domain,
+                        location: 'Unknown'
+                    }));
 
-                setBackendCompetitors(transformedCompetitors);
+                    setBackendCompetitors(transformedCompetitors);
 
                 // Store competitors with solutions for SolutionComparison component
                 const competitorsWithSols = competitorsFromBackend.map(comp => ({
@@ -103,23 +106,26 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
                         Emerging: [...columns.Emerging]
                     };
 
-                    transformedCompetitors.forEach(comp => {
-                        const category = comp.category || 'Direct';
-                        // Only add if not already in the column
-                        if (!newColumns[category].find((c: CompetitorData) => c.name === comp.name)) {
-                            newColumns[category].push(comp);
-                        }
-                    });
+                        transformedCompetitors.forEach(comp => {
+                            const category = comp.category || 'Direct';
+                            // Only add if not already in the column
+                            if (!newColumns[category].find((c: CompetitorData) => c.name === comp.name)) {
+                                newColumns[category].push(comp);
+                            }
+                        });
 
-                    setColumns(newColumns);
+                        setColumns(newColumns);
+                    }
+                } catch (error) {
+                    console.error('Failed to enrich competitors:', error);
+                } finally {
+                    setLoadingCompetitors(false);
                 }
-            } catch (error) {
-                console.error('Failed to load competitors from backend:', error);
-            }
-        };
+            };
 
-        loadCompetitors();
-    }, [isSaved, companyData.domain]);
+            enrichCompetitors();
+        }
+    }, [activeTab, companyData.domain]);
 
     const onDragEnd = (result: DropResult) => {
         const { source, destination } = result;
@@ -170,45 +176,30 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
         setLoadingCategories(prev => new Set(prev).add(id));
 
         try {
-            // Call the backend API to record category observation
-            const response = await api.recordCategoryObservation(companyData.domain, {
-                category_label: newCategory.label,
-                description: newCategory.description
+            // Call the backend API to add criteria and analyze all competitors
+            console.log('Adding criteria and analyzing competitors...');
+            const response = await api.addCriteria({
+                domain: companyData.domain,
+                criteria_name: newCategory.label,
+                criteria_definition: newCategory.description
             });
 
-            console.log('Category observation recorded:', response);
+            console.log('Criteria analysis complete:', response);
+            console.log(`Analyzed ${response.competitors_analyzed}/${response.total_competitors} competitors in ${response.execution_time_seconds.toFixed(2)}s`);
 
-            // Simulate NLP data fetching (this could be replaced with real AI-generated values from backend)
-            setTimeout(() => {
-                const mockValues: Record<string, string> = {};
-                const allCompanies = [
-                    { name: companyData.name },
-                    ...MOCK_COMPETITORS
-                ];
+            // Remove loading state after successful analysis
+            setLoadingCategories(prev => {
+                const next = new Set(prev);
+                next.delete(id);
+                return next;
+            });
 
-                allCompanies.forEach(company => {
-                    if (categoryToAdd.label.toLowerCase().includes('rate') || categoryToAdd.label.toLowerCase().includes('%')) {
-                        mockValues[company.name] = `${Math.floor(Math.random() * 80 + 10)}%`;
-                    } else if (categoryToAdd.label.toLowerCase().includes('score')) {
-                        mockValues[company.name] = `${Math.floor(Math.random() * 50 + 50)}/100`;
-                    } else {
-                        mockValues[company.name] = ['High', 'Medium', 'Low', 'Very High'][Math.floor(Math.random() * 4)];
-                    }
-                });
+            // TODO: Optionally refresh timeline or show success notification
 
-                setCustomMetricValues(prev => ({
-                    ...prev,
-                    [id]: mockValues
-                }));
-
-                setLoadingCategories(prev => {
-                    const next = new Set(prev);
-                    next.delete(id);
-                    return next;
-                });
-            }, 2500);
         } catch (error) {
-            console.error('Failed to record category observation:', error);
+            console.error('Failed to add criteria:', error);
+            // Remove the category on error
+            setCustomCategories(prev => prev.filter(cat => cat.id !== id));
             // Remove loading state on error
             setLoadingCategories(prev => {
                 const next = new Set(prev);
@@ -226,28 +217,6 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
             delete next[id];
             return next;
         });
-    };
-
-    const handleSaveProfile = async (updatedDescription: string) => {
-        try {
-            // Update the description in the API response
-            const updatedResponse = {
-                ...apiResponse,
-                company_profile: {
-                    ...apiResponse.company_profile,
-                    core_business: {
-                        ...apiResponse.company_profile.core_business,
-                        company_overview: updatedDescription
-                    }
-                }
-            };
-
-            await api.saveCompanyProfile(updatedResponse);
-            setIsSaved(true);
-        } catch (error) {
-            console.error('Failed to save company profile:', error);
-            // TODO: Show error notification
-        }
     };
 
     const handleAddSolution = async (newSolution: any) => {
@@ -322,9 +291,44 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
         }
     };
 
-    const handleCloseInfoModal = () => {
-        setShowInfoModal(false);
-    };
+    // Fetch company profile when Company Info tab becomes active
+    useEffect(() => {
+        if (activeTab === 'company') {
+            const fetchCompanyProfile = async () => {
+                setLoadingCompanyProfile(true);
+                try {
+                    const response = await api.getCompanyProfile(companyData.domain);
+                    console.log('Company profile fetched:', response);
+                    // TODO: Update companyData state if needed
+                } catch (error) {
+                    console.error('Failed to fetch company profile:', error);
+                } finally {
+                    setLoadingCompanyProfile(false);
+                }
+            };
+            fetchCompanyProfile();
+        }
+    }, [activeTab, companyData.domain]);
+
+    // Fetch solutions when Solutions tab becomes active
+    useEffect(() => {
+        if (activeTab === 'solutions') {
+            const fetchSolutions = async () => {
+                setLoadingSolutions(true);
+                try {
+                    const solutionsData = await api.getSolutions(companyData.domain);
+                    console.log('Solutions fetched:', solutionsData);
+                    // Map to SolutionData format if needed
+                    // setSolutions(mappedSolutions);
+                } catch (error) {
+                    console.error('Failed to fetch solutions:', error);
+                } finally {
+                    setLoadingSolutions(false);
+                }
+            };
+            fetchSolutions();
+        }
+    }, [activeTab, companyData.domain]);
 
     const handleEnrichCompetitors = async (forceRefresh: boolean = false) => {
         setIsEnrichingCompetitors(true);
@@ -396,59 +400,36 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
 
     return (
         <Container size="xl" py="xl">
-            <Tabs defaultValue="company">
+            <Tabs value={activeTab} onChange={(value) => setActiveTab(value || 'company')}>
                 <Tabs.List mb="lg">
                     <Tabs.Tab value="company" leftSection={<IconBuildingSkyscraper size={16} />}>
                         Company Info
                     </Tabs.Tab>
-                    {isSaved && (
-                        <>
-                            <Tabs.Tab value="solutions" leftSection={<IconBulb size={16} />}>
-                                My Solutions
-                            </Tabs.Tab>
-                            <Tabs.Tab value="competitors" leftSection={<IconUsers size={16} />}>
-                                Competitors
-                            </Tabs.Tab>
-                            <Tabs.Tab value="compare" leftSection={<IconChartBar size={16} />}>
-                                Compare
-                            </Tabs.Tab>
-                            <Tabs.Tab value="compareSolutions" leftSection={<IconGitCompare size={16} />}>
-                                Compare Solutions
-                            </Tabs.Tab>
-                            <Tabs.Tab value="timeline" leftSection={<IconTimeline size={16} />}>
-                                Timeline
-                            </Tabs.Tab>
-                            <Tabs.Tab value="userPreferences" ml="auto" leftSection={<IconSettings size={16} />}>
-                                User Preferences
-                            </Tabs.Tab>
-                        </>
-                    )}
+                    <Tabs.Tab value="solutions" leftSection={<IconBulb size={16} />}>
+                        My Solutions
+                    </Tabs.Tab>
+                    <Tabs.Tab value="competitors" leftSection={<IconUsers size={16} />}>
+                        Competitors
+                    </Tabs.Tab>
+                    <Tabs.Tab value="compare" leftSection={<IconChartBar size={16} />}>
+                        Compare
+                    </Tabs.Tab>
+                    <Tabs.Tab value="compareSolutions" leftSection={<IconGitCompare size={16} />}>
+                        Compare Solutions
+                    </Tabs.Tab>
+                    <Tabs.Tab value="timeline" leftSection={<IconTimeline size={16} />}>
+                        Timeline
+                    </Tabs.Tab>
+                    <Tabs.Tab value="userPreferences" ml="auto" leftSection={<IconSettings size={16} />}>
+                        User Preferences
+                    </Tabs.Tab>
                 </Tabs.List>
 
                 <Tabs.Panel value="company">
-                    <Modal
-                        opened={showInfoModal && !isSaved}
-                        onClose={handleCloseInfoModal}
-                        title="Company Information"
-                        centered
-                        size="md"
-                    >
-                        <Stack gap="md">
-                            <Text>
-                                This is the current status of the company info. Modify accordingly if necessary, and press "Save" to continue.
-                            </Text>
-                            <Button onClick={handleCloseInfoModal} fullWidth>
-                                Got it
-                            </Button>
-                        </Stack>
-                    </Modal>
-
                     <Grid>
                         <Grid.Col span={{ base: 12, md: 8 }}>
                             <CompanyCard
                                 data={companyData}
-                                onSave={handleSaveProfile}
-                                isSaved={isSaved}
                             />
                         </Grid.Col>
                     </Grid>
@@ -665,8 +646,8 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
 
                 <Tabs.Panel value="timeline">
                     <Timeline
-                        alerts={MOCK_TIMELINE_ALERTS}
-                        competitors={MOCK_COMPETITORS.map(c => c.name)}
+                        domain={companyData.domain}
+                        isActive={activeTab === 'timeline'}
                     />
                 </Tabs.Panel>
 
