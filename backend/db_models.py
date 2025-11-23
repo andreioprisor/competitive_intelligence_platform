@@ -27,7 +27,7 @@ class Competitor(Base):
     __tablename__ = 'competitors'
     
     id = Column(Integer, primary_key=True)
-    domain = Column(String, unique=True,nullable=False, index=True)
+    domain = Column(String, nullable=False, index=True)
     solutions = Column(JSONB, default={})
     company_id = Column(Integer, ForeignKey('companies.id', ondelete='CASCADE'), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
