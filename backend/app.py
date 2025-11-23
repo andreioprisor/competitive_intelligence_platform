@@ -118,6 +118,44 @@ class SolutionsComparisonRequest(BaseModel):
     competitor_solution: Dict[str, Any] = Field(..., description="Competitor's solution data")
 
 
+class AddCriteriaRequest(BaseModel):
+    """Request model for adding a new criteria and analyzing competitors."""
+    domain: str = Field(..., description="Company domain")
+    criteria_name: str = Field(..., description="Name of the criteria (e.g., 'Google Ads Strategy')")
+    criteria_definition: str = Field(..., description="Detailed definition of what to analyze")
+    value_ranges: Optional[Dict[str, str]] = Field(None, description="Optional value ranges for mapping responses")
+
+
+class AddCriteriaResponse(BaseModel):
+    """Response model for add criteria endpoint."""
+    success: bool = Field(..., description="Whether the operation was successful")
+    message: str = Field(..., description="Status message")
+    criteria_id: int = Field(..., description="Database ID of the created criteria")
+    company_id: int = Field(..., description="Database ID of the company")
+    company_name: str = Field(..., description="Name of the company")
+    criteria_name: str = Field(..., description="Name of the criteria")
+    competitors_analyzed: int = Field(..., description="Number of competitors analyzed")
+    analysis_results: Dict[str, Any] = Field(..., description="Results from parallel analysis")
+    execution_time_seconds: float = Field(..., description="Total execution time in seconds")
+
+
+class EnrichCompetitorsRequest(BaseModel):
+    """Request model for enriching competitors."""
+    domain: str = Field(..., description="Company domain")
+
+
+class EnrichCompetitorsResponse(BaseModel):
+    """Response model for enrich competitors endpoint."""
+    success: bool = Field(..., description="Whether the operation was successful")
+    message: str = Field(..., description="Status message")
+    company_id: int = Field(..., description="Database ID of the company")
+    company_name: str = Field(..., description="Name of the company")
+    competitors_enriched: int = Field(..., description="Number of competitors successfully enriched")
+    total_competitors: int = Field(..., description="Total number of competitors")
+    enrichment_results: Dict[str, Any] = Field(..., description="Results from parallel enrichment")
+    execution_time_seconds: float = Field(..., description="Total execution time in seconds")
+
+
 def load_prompt_template(prompt_name: str) -> str:
     """Load a prompt template from the prompts directory."""
     prompt_path = PROMPTS_DIR / prompt_name
@@ -741,75 +779,214 @@ async def record_category_observation(
         "company_id": criteria.company_id
     }
 
-
-@app.get("/solutions_comparison")
-async def compare_solutions(
-    domain: str = Query(..., description="The domain of the company"),
-    company_solution: str = Query(..., description="The company's solution data (JSON string)"),
-    competitor_solution: str = Query(..., description="The competitor's solution data (JSON string)"),
-    model: str = Query("gemini-3-pro-preview", description="Gemini model to use"),
+@app.post(
+    "/add-criteria",
+    response_model=AddCriteriaResponse,
+    summary="Add New Criteria and Analyze All Competitors",
+    description="Creates a new criteria for a company and runs parallel ReactGraph analysis for all competitors, caching results in the database"
+)
+async def add_criteria(
+    request: AddCriteriaRequest,
     db: Session = Depends(get_db)
-):
+) -> AddCriteriaResponse:
     """
-    Compare solutions between a company and its competitor.
+    Add a new criteria and analyze all competitors in parallel.
+
+    This endpoint:
+    1. Validates that the company exists in the database
+    2. Creates a new Criteria record
+    3. Fetches all competitors for the company
+    4. Launches parallel ReactGraph agents (one per competitor)
+    5. Caches analysis results in the Value table
+    6. Returns aggregated results
+
+    Args:
+        request: AddCriteriaRequest with domain, criteria_name, criteria_definition, value_ranges
+        db: Database session (injected)
+
+    Returns:
+        AddCriteriaResponse: Success status, criteria ID, and analysis results
+
+    Raises:
+        HTTPException: If company not found or analysis fails
     """
+    from run_criterias_parallel import CriteriaAnalysisOrchestrator
+    import time
+
+    start_time = time.time()
+
     try:
-        clean_domain_str = clean_domain(domain)
-        company = db.query(Company).filter(Company.domain == clean_domain_str).first()
+        logger.info(f"Received add-criteria request for domain: {request.domain}")
+        logger.info(f"Criteria: {request.criteria_name}")
 
+        # Step 1: Validate company exists
+        company = db.query(Company).filter_by(domain=request.domain).first()
         if not company:
-            company = Company(domain=clean_domain_str)
-            db.add(company)
+            raise HTTPException(
+                status_code=404,
+                detail=f"Company not found for domain: {request.domain}"
+            )
+
+        logger.info(f"Found company: {company.profile.get('name', request.domain)} (ID: {company.id})")
+
+        # Step 2: Check if company has competitors
+        competitors_count = len(company.competitors)
+        if competitors_count == 0:
+            logger.warning(f"Company {request.domain} has no competitors")
+            # Still create criteria but skip analysis
+            new_criteria = Criteria(
+                company_id=company.id,
+                name=request.criteria_name,
+                definition=request.criteria_definition
+            )
+            db.add(new_criteria)
             db.commit()
-            db.refresh(company)
+            db.refresh(new_criteria)
 
-        # Parse JSON strings from query parameters
-        try:
-            company_solution_data = json.loads(company_solution)
-            competitor_solution_data = json.loads(competitor_solution)
-        except json.JSONDecodeError as e:
-            raise HTTPException(status_code=400, detail=f"Invalid JSON in solution parameters: {str(e)}")
+            return AddCriteriaResponse(
+                success=True,
+                message=f"Criteria created but no competitors to analyze",
+                criteria_id=new_criteria.id,
+                company_id=company.id,
+                company_name=company.profile.get("name", request.domain),
+                criteria_name=request.criteria_name,
+                competitors_analyzed=0,
+                analysis_results={
+                    "total": 0,
+                    "successful": 0,
+                    "failed": 0,
+                    "results": []
+                },
+                execution_time_seconds=time.time() - start_time
+            )
 
-        comp_sol_name = company_solution_data.get("Title") or company_solution_data.get("title") or "Unknown"
-        competitor_sol_name = competitor_solution_data.get("Title") or competitor_solution_data.get("title") or "Unknown"
+        logger.info(f"Found {competitors_count} competitors to analyze")
 
-        # Check cache
-        cached_comparison = db.query(SolutionComparison).filter(
-            SolutionComparison.company_id == company.id,
-            SolutionComparison.company_solution_name == comp_sol_name,
-            SolutionComparison.competitor_solution_name == competitor_sol_name
-        ).first()
-
-        if cached_comparison:
-            logger.info("Returning cached solution comparison")
-            return {"comparison_result": cached_comparison.comparison_result, "cached": True}
-
-        gemini_api = GeminiAPI(model_id=model)
-
-        template = load_prompt_template("solutions_comparison.md")
-
-        prompt = template.replace("{{COMPANY_SOLUTION}}", json.dumps(company_solution_data, indent=2))
-        prompt = prompt.replace("{{COMPETITOR_SOLUTION}}", json.dumps(competitor_solution_data, indent=2))
-
-        response = gemini_api.get_completion(prompt, model_name=model)
-
-        # Save to cache
-        new_comparison = SolutionComparison(
+        # Step 3: Create new Criteria record
+        new_criteria = Criteria(
             company_id=company.id,
-            company_solution_name=comp_sol_name,
-            competitor_solution_name=competitor_sol_name,
-            comparison_result=response
+            name=request.criteria_name,
+            definition=request.criteria_definition
         )
-        db.add(new_comparison)
+        db.add(new_criteria)
         db.commit()
+        db.refresh(new_criteria)
 
-        return {"comparison_result": response, "cached": False}
+        logger.info(f"Created new criteria with ID: {new_criteria.id}")
+
+        # Step 4: Initialize orchestrator
+        orchestrator = CriteriaAnalysisOrchestrator(
+            max_concurrency=3,  # Configurable - can be moved to env variable
+            db_session=db
+        )
+
+        # Step 5: Run parallel analysis
+        logger.info(f"Starting parallel analysis for {competitors_count} competitors...")
+        analysis_results = await orchestrator.run_criteria_for_all_competitors(
+            company_domain=request.domain,
+            criteria_id=new_criteria.id
+        )
+
+        # Step 6: Calculate total execution time
+        execution_time = time.time() - start_time
+
+        logger.info(f"Analysis complete in {execution_time:.2f} seconds")
+        logger.info(f"Successful: {analysis_results['successful']}, Failed: {analysis_results['failed']}")
+
+        # Step 7: Return response
+        return AddCriteriaResponse(
+            success=True,
+            message=f"Successfully analyzed {analysis_results['successful']} out of {analysis_results['total']} competitors",
+            criteria_id=new_criteria.id,
+            company_id=company.id,
+            company_name=company.profile.get("name", request.domain),
+            criteria_name=request.criteria_name,
+            competitors_analyzed=analysis_results['successful'],
+            analysis_results=analysis_results,
+            execution_time_seconds=execution_time
+        )
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error comparing solutions: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error in add-criteria endpoint: {e}", exc_info=True)
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error creating criteria and analyzing competitors: {str(e)}"
+        )
+
+
+@app.post(
+    "/enrich-competitors",
+    response_model=EnrichCompetitorsResponse,
+    summary="Enrich All Competitors with Market Intelligence",
+    description="Enriches all competitor profiles using Google Search grounding via Gemini API, performing comparative analysis against the company's solutions"
+)
+async def enrich_competitors(
+    request: EnrichCompetitorsRequest,
+    db: Session = Depends(get_db)
+) -> EnrichCompetitorsResponse:
+    """
+    Enrich all competitors for a company with market intelligence.
+
+    This endpoint:
+    1. Validates that the company exists in the database
+    2. Fetches all competitors for the company
+    3. Launches parallel Gemini calls with Google Search grounding (one per competitor)
+    4. Each call performs comparative analysis against company's solutions
+    5. Caches enriched profiles in Competitor.solutions field
+    6. Returns aggregated results
+
+    Args:
+        request: EnrichCompetitorsRequest with company domain
+        db: Database session (injected)
+
+    Returns:
+        EnrichCompetitorsResponse: Success status and enrichment results
+
+    Raises:
+        HTTPException: If company not found or enrichment fails
+    """
+    from run_competitors_enrichment_parallel import enrich_all_competitors
+
+    try:
+        logger.info(f"Received enrich-competitors request for domain: {request.domain}")
+
+        # Run parallel enrichment using simple function
+        enrichment_results = await enrich_all_competitors(
+            company_domain=request.domain,
+            db=db,
+            max_concurrent=3
+        )
+
+        # Get company for response data
+        company = db.query(Company).filter_by(domain=request.domain).first()
+
+        logger.info(f"Enrichment complete in {enrichment_results['execution_time_seconds']:.2f} seconds")
+        logger.info(f"Successful: {enrichment_results['successful']}, Failed: {enrichment_results['failed']}")
+
+        # Return response
+        return EnrichCompetitorsResponse(
+            success=True,
+            message=f"Successfully enriched {enrichment_results['successful']} out of {enrichment_results['total']} competitors",
+            company_id=company.id,
+            company_name=enrichment_results['company_name'],
+            competitors_enriched=enrichment_results['successful'],
+            total_competitors=enrichment_results['total'],
+            enrichment_results=enrichment_results,
+            execution_time_seconds=enrichment_results['execution_time_seconds']
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in enrich-competitors endpoint: {e}", exc_info=True)
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error enriching competitors: {str(e)}"
+        )
 
 
 @app.get("/health", response_model=HealthResponse)

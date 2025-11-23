@@ -45,9 +45,40 @@ class CompanyProfile:
         }
 
 
+class CompetitorProfile:
+    """Competitor profile schema from company profile's competitors field."""
+
+    def __init__(self, name: str = "", domain: str = "", website: str = "",
+                 description: str = "", differentiators: List[str] = None):
+        self.name = name
+        self.domain = domain or website  # Support both field names
+        self.description = description
+        self.differentiators = differentiators or []
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'CompetitorProfile':
+        """Create CompetitorProfile from dictionary."""
+        return cls(
+            name=data.get("name", data.get("Name", "")),
+            domain=data.get("domain", data.get("Domain", data.get("website", ""))),
+            website=data.get("website", data.get("Website", "")),
+            description=data.get("description", data.get("Description", "")),
+            differentiators=data.get("differentiators", data.get("Differentiators", []))
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert CompetitorProfile to dictionary."""
+        return {
+            "name": self.name,
+            "domain": self.domain,
+            "description": self.description,
+            "differentiators": self.differentiators
+        }
+
+
 class Solution:
     """Solution profile schema matching the prompt structure."""
-    
+
     def __init__(self, title: str = "", description: str = "",
                  features: List[str] = None, benefits: List[str] = None,
                  use_cases: List[str] = None, target_industries: List[str] = None,
@@ -72,7 +103,7 @@ class Solution:
         self.market_intelligence = market_intelligence or {}
         self.pain_point_intelligence = pain_point_intelligence or {}
         self.external_validation = external_validation or {}
-    
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Solution':
         """Create Solution from dictionary."""
@@ -92,7 +123,7 @@ class Solution:
             pain_point_intelligence=data.get("pain_point_intelligence", {}),
             external_validation=data.get("external_validation", {})
         )
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert Solution to dictionary."""
         return {
