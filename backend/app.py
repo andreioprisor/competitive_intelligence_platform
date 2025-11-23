@@ -446,13 +446,40 @@ async def save_company_profile(
         # Run agentic pipeline
         logger.info(f"Starting agentic pipeline for {request.domain}")
         pipeline_result = run_agentic_pipeline(request.dict())
-        
+
         logger.info(f"Agentic pipeline completed for {request.domain}")
-        
+
+        # Auto-trigger competitor enrichment in background
+        try:
+            from run_competitors_enrichment_parallel import enrich_all_competitors
+            import asyncio
+
+            logger.info(f"Auto-triggering competitor enrichment for {request.domain}")
+
+            # Run enrichment in background (non-blocking)
+            async def background_enrichment():
+                try:
+                    await enrich_all_competitors(
+                        company_domain=request.domain,
+                        db=db,
+                        max_concurrent=3
+                    )
+                    logger.info(f"✓ Background competitor enrichment completed for {request.domain}")
+                except Exception as e:
+                    logger.error(f"Background enrichment failed: {e}", exc_info=True)
+
+            # Create task to run in background
+            asyncio.create_task(background_enrichment())
+            logger.info(f"Competitor enrichment task created for {request.domain}")
+
+        except Exception as e:
+            logger.warning(f"Could not trigger background enrichment: {e}")
+            # Don't fail the main request if enrichment fails
+
         action_message = "updated" if operation == "updated" else "saved"
         return SaveCompanyProfileResponse(
             success=True,
-            message=f"Profile {action_message} successfully for {request.domain}",
+            message=f"Profile {action_message} successfully for {request.domain}. Competitor enrichment running in background.",
             profile_id=company.id,
             domain=request.domain,
             agentic_pipeline_result=pipeline_result
@@ -778,6 +805,166 @@ async def record_category_observation(
         "definition": criteria.definition,
         "company_id": criteria.company_id
     }
+
+@app.get("/solutions_comparison")
+async def compare_solutions(
+    domain: str = Query(..., description="Company domain"),
+    competitor_domain: str = Query(..., description="Competitor domain"),
+    company_solution_name: str = Query(..., description="Company solution name"),
+    competitor_solution_name: str = Query(..., description="Competitor solution name"),
+    db: Session = Depends(get_db)
+):
+    """
+    Compare a company solution with a competitor solution.
+
+    This endpoint:
+    1. Finds the company and competitor in the database
+    2. Looks up the specific solutions by name in the competitor's enriched data
+    3. Extracts comparison fields (we_are_better, they_are_better, conclusions, etc.)
+    4. Formats the comparison professionally using LLM
+    5. Returns formatted comparison report
+
+    Args:
+        domain: Company domain
+        competitor_domain: Competitor domain
+        company_solution_name: Name of the company's solution
+        competitor_solution_name: Name of the competitor's solution
+        db: Database session (injected)
+
+    Returns:
+        Formatted comparison report with professional presentation
+
+    Raises:
+        HTTPException: If company, competitor, or solutions not found
+    """
+    try:
+        logger.info(f"Comparison request: {company_solution_name} vs {competitor_solution_name}")
+
+        # Find company
+        clean_domain_str = clean_domain(domain)
+        company = db.query(Company).filter(Company.domain == clean_domain_str).first()
+        if not company:
+            raise HTTPException(status_code=404, detail=f"Company not found: {domain}")
+
+        # Find competitor
+        clean_competitor_domain = clean_domain(competitor_domain)
+        competitor = db.query(Competitor).filter(
+            Competitor.company_id == company.id,
+            Competitor.domain == clean_competitor_domain
+        ).first()
+
+        if not competitor:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Competitor not found: {competitor_domain}"
+            )
+
+        # Get competitor solutions from JSONB field
+        competitor_solutions = competitor.solutions or []
+
+        # Find the specific solution by name
+        matching_solution = None
+        for solution in competitor_solutions:
+            if isinstance(solution, dict):
+                sol_name = solution.get("name", "").lower()
+                if competitor_solution_name.lower() in sol_name or sol_name in competitor_solution_name.lower():
+                    matching_solution = solution
+                    break
+
+        if not matching_solution:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Solution '{competitor_solution_name}' not found for competitor {competitor_domain}"
+            )
+
+        # Extract comparison data
+        comparison_data = {
+            "company_solution": company_solution_name,
+            "competitor_solution": competitor_solution_name,
+            "competitor_name": competitor.domain,
+            "we_are_better": matching_solution.get("we_are_better", ""),
+            "they_are_better": matching_solution.get("they_are_better", ""),
+            "conclusions": matching_solution.get("conclusions", ""),
+            "differentiators": matching_solution.get("differentiators", []),
+            "pricing_comparison": matching_solution.get("pricing_comparison", ""),
+            "market_position": matching_solution.get("market_position", ""),
+            "target_customers": matching_solution.get("target_customers", ""),
+        }
+
+        # Format with LLM for professional presentation
+        logger.info("Formatting comparison report with LLM...")
+
+        formatting_prompt = f"""
+You are a professional business analyst creating a competitive intelligence report.
+
+Format the following solution comparison data into a clear, professional, and actionable report.
+
+**Company Solution:** {comparison_data['company_solution']}
+**Competitor Solution:** {comparison_data['competitor_solution']} (by {comparison_data['competitor_name']})
+
+**Our Advantages:**
+{comparison_data['we_are_better']}
+
+**Their Advantages:**
+{comparison_data['they_are_better']}
+
+**Key Differentiators:**
+{', '.join(comparison_data['differentiators']) if comparison_data['differentiators'] else 'N/A'}
+
+**Pricing Comparison:**
+{comparison_data['pricing_comparison']}
+
+**Market Position:**
+{comparison_data['market_position']}
+
+**Target Customers:**
+{comparison_data['target_customers']}
+
+**Strategic Conclusions:**
+{comparison_data['conclusions']}
+
+---
+
+Please create a professional, well-structured HTML report with:
+1. Executive Summary (2-3 sentences)
+2. Competitive Positioning Matrix
+3. Our Strengths vs Their Strengths (side-by-side comparison)
+4. Strategic Recommendations (3-5 bullet points)
+5. Key Takeaways
+
+Use professional formatting with headers, bullet points, and emphasis where appropriate.
+The output should be ready to present to stakeholders.
+"""
+
+        # Call Gemini API for formatting
+        gemini_api = GeminiAPI(model_id="gemini-3-pro-preview")
+        formatted_report = gemini_api.get_completion(
+            formatting_prompt,
+            model_name="gemini-2.5-pro",
+            temperature=0.3
+        )
+
+        logger.info("Comparison report formatted successfully")
+
+        return {
+            "success": True,
+            "company_solution": company_solution_name,
+            "competitor_solution": competitor_solution_name,
+            "competitor_domain": competitor_domain,
+            "raw_data": comparison_data,
+            "formatted_report": formatted_report,
+            "cached": True  # Data from DB
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in solutions comparison: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error comparing solutions: {str(e)}"
+        )
+
 
 @app.post(
     "/add-criteria",
