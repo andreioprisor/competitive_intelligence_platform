@@ -36,6 +36,10 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
     const [competitorsWithSolutions, setCompetitorsWithSolutions] = useState<Array<{ name: string; website?: string; solutions?: string[] }>>([]);
     const [competitorsFullData, setCompetitorsFullData] = useState<Array<{ domain: string; solutions: any }>>([]);
     const [isEnrichingCompetitors, setIsEnrichingCompetitors] = useState(false);
+    const [activeTab, setActiveTab] = useState<string>('company');
+    const [loadingCompetitors, setLoadingCompetitors] = useState(false);
+    const [loadingCompanyProfile, setLoadingCompanyProfile] = useState(false);
+    const [loadingSolutions, setLoadingSolutions] = useState(false);
 
     // Organize competitors by category
     const [columns, setColumns] = useState<{ [key: string]: CompetitorData[] }>(() => ({
