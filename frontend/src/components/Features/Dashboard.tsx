@@ -58,7 +58,7 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
                 // Transform backend format to CompetitorData format
                 const transformedCompetitors: CompetitorData[] = competitorsFromBackend.map(comp => ({
                     name: comp.domain,
-                    logoUrl: '',
+                    logoUrl: `https://logo.clearbit.com/${comp.domain}`,
                     description: `Competitor: ${comp.domain}`,
                     strategies: [],
                     category: 'Direct', // Default category
@@ -267,7 +267,7 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
             // Transform the competitor data to match CompetitorData interface
             const competitorData: CompetitorData = {
                 name: newCompetitor.name,
-                logoUrl: '',
+                logoUrl: newCompetitor.domain ? `https://logo.clearbit.com/${newCompetitor.domain}` : '',
                 description: newCompetitor.description,
                 strategies: [],
                 category: newCompetitor.category,
@@ -340,7 +340,7 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
             // Transform backend format to CompetitorData format
             const transformedCompetitors: CompetitorData[] = competitorsFromBackend.map(comp => ({
                 name: comp.domain,
-                logoUrl: '',
+                logoUrl: `https://logo.clearbit.com/${comp.domain}`,
                 description: `Competitor: ${comp.domain}`,
                 strategies: [],
                 category: 'Direct',
