@@ -21,8 +21,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from api_clients.gemini_adapter import GeminiAPI
-from db_config import get_db, init_db
-from db_models import CompanyProfile
+from database import get_db
+from db_models import *
 
 # Configure logging
 logging.basicConfig(
@@ -117,10 +117,25 @@ def parse_json_response(response: str, field_name: str) -> Any:
     """Parse JSON from response text, handling markdown code blocks."""
     try:
         cleaned_response = response.strip()
-        if cleaned_response.startswith("```json"):
-            cleaned_response = cleaned_response[7:]
-        if cleaned_response.endswith("```"):
-            cleaned_response = cleaned_response[:-3]
+        
+        # Handle case where response has text before the JSON code block
+        if "```json" in cleaned_response:
+            # Extract content between ```json and ```
+            start_marker = "```json"
+            end_marker = "```"
+            
+            start_idx = cleaned_response.find(start_marker)
+            if start_idx != -1:
+                # Start after the ```json marker
+                start_idx += len(start_marker)
+                # Find the closing ``` after the start
+                end_idx = cleaned_response.find(end_marker, start_idx)
+                if end_idx != -1:
+                    cleaned_response = cleaned_response[start_idx:end_idx]
+                else:
+                    # No closing marker, take everything after ```json
+                    cleaned_response = cleaned_response[start_idx:]
+        
         cleaned_response = cleaned_response.strip()
         
         return json.loads(cleaned_response)
@@ -212,7 +227,7 @@ Company Domain: {domain}
         # Get the response from Gemini with Google Search
         response = gemini_api.get_google_search_response(
             prompt=search_query,
-            model_name="gemini-3.0-pro",
+            model_name="gemini-3-pro-preview",
             thinking_budget=2000,
             temperature=0.7
         )
@@ -271,7 +286,7 @@ Generate the JSON array of enhanced solution profiles according to the FINAL OUT
         # Get the response from Gemini with Google Search
         response = gemini_api.get_google_search_response(
             prompt=search_query,
-            model_name="gemini-3.0-pro",
+            model_name="gemini-3-pro-preview",
             thinking_budget=3000,
             temperature=0.7
         )
@@ -324,50 +339,47 @@ async def save_company_profile(
     try:
         logger.info(f"Received save request for domain: {request.domain}")
         
-        # Check if profile already exists
-        existing_profile = db.query(CompanyProfile).filter(
-            CompanyProfile.domain == request.domain
+        # Optional: Validate and serialize using schema classes
+        # profile_obj = CompanyProfileSchema.from_dict(request.company_profile)
+        # solutions_objs = [SolutionSchema.from_dict(s) for s in request.solutions_profile]
+        # validated_profile = profile_obj.to_dict()
+        # validated_solutions = [s.to_dict() for s in solutions_objs]
+        
+        # Check if company already exists
+        existing_company = db.query(Company).filter(
+            Company.domain == request.domain
         ).first()
         
-        profile_data = {
-            "company_profile": request.company_profile,
-            "solutions_profile": request.solutions_profile,
-            "analysis_metadata": request.analysis_metadata,
-            "domain": request.domain
-        }
-        
-        if existing_profile:
-            # Update existing profile
-            logger.info(f"Profile already exists for domain: {request.domain}, updating...")
-            existing_profile.company_profile = request.company_profile
-            existing_profile.solutions_profile = request.solutions_profile
-            existing_profile.analysis_metadata = request.analysis_metadata
-            existing_profile.company_name = request.company_profile.get("name", None)
+        if existing_company:
+            # Update existing company
+            logger.info(f"Company already exists for domain: {request.domain}, updating...")
+            existing_company.profile = request.company_profile
+            existing_company.solutions = request.solutions_profile
             db.commit()
-            db.refresh(existing_profile)
-            logger.info(f"✓ Successfully updated profile with ID: {existing_profile.id}")
-            new_profile = existing_profile
+            db.refresh(existing_company)
+            logger.info(f"✓ Successfully updated company with ID: {existing_company.id}")
+            company = existing_company
             operation = "updated"
         else:
-            # Create new profile instance
+            # Create new company instance
             logger.info(f"Creating new database record for {request.domain}")
-            new_profile = CompanyProfile.from_profile_response(request.domain, profile_data)
+            company = Company(
+                domain=request.domain,
+                profile=request.company_profile,
+                solutions=request.solutions_profile
+            )
             
             # Save to database
-            db.add(new_profile)
+            db.add(company)
             db.commit()
-            db.refresh(new_profile)
+            db.refresh(company)
             
-            logger.info(f"✓ Successfully saved profile to database with ID: {new_profile.id}")
+            logger.info(f"✓ Successfully saved company to database with ID: {company.id}")
             operation = "created"
         
         # Run agentic pipeline
         logger.info(f"Starting agentic pipeline for {request.domain}")
         pipeline_result = run_agentic_pipeline(request.dict())
-        
-        # Update profile with pipeline result
-        new_profile.agentic_pipeline_result = pipeline_result
-        db.commit()
         
         logger.info(f"Agentic pipeline completed for {request.domain}")
         
@@ -375,7 +387,7 @@ async def save_company_profile(
         return SaveCompanyProfileResponse(
             success=True,
             message=f"Profile {action_message} successfully for {request.domain}",
-            profile_id=new_profile.id,
+            profile_id=company.id,
             domain=request.domain,
             agentic_pipeline_result=pipeline_result
         )
@@ -425,9 +437,9 @@ async def profile_competitors_solution(
         example="stripe.com"
     ),
     model: str = Query(
-        "gemini-3.0-pro",
+        "gemini-3-pro-preview",
         description="Gemini model to use",
-        example="gemini-3.0-pro"
+        example="gemini-3-pro-preview"
     ),
     db: Session = Depends(get_db)
 ) -> ProfileCompetitorsSolutionResponse:
@@ -464,22 +476,27 @@ async def profile_competitors_solution(
                 detail=f"Invalid domain format: {domain}"
             )
         
-        # Step 1: Check if profile exists in database
+        # Step 1: Check if company exists in database
         logger.info(f"Checking database for cached profile: {clean_domain_str}")
-        cached_profile = db.query(CompanyProfile).filter(
-            CompanyProfile.domain == clean_domain_str
+        cached_company = db.query(Company).filter(
+            Company.domain == clean_domain_str
         ).first()
         
-        if cached_profile:
-            logger.info(f"✓ Found cached profile in database for {clean_domain_str}")
+        if cached_company:
+            logger.info(f"✓ Found cached company in database for {clean_domain_str}")
+            
+            # Optional: Deserialize using schema classes for validation/manipulation
+            # profile_obj = CompanyProfileSchema.from_dict(cached_company.profile)
+            # solutions_objs = [SolutionSchema.from_dict(s) for s in cached_company.solutions]
+            
             return ProfileCompetitorsSolutionResponse(
-                domain=cached_profile.domain,
-                company_profile=cached_profile.company_profile,
-                solutions_profile=cached_profile.solutions_profile,
+                domain=cached_company.domain,
+                company_profile=cached_company.profile,
+                solutions_profile=cached_company.solutions,
                 analysis_metadata={
-                    **cached_profile.analysis_metadata,
                     "source": "database_cache",
-                    "cached": True
+                    "cached": True,
+                    "company_id": cached_company.id
                 }
             )
         
@@ -515,22 +532,26 @@ async def profile_competitors_solution(
         # Step 4: Auto-save the generated profile to the database
         logger.info(f"Auto-saving generated profile to database for {clean_domain_str}")
         try:
-            profile_data = {
-                "company_profile": company_profile,
-                "solutions_profile": solutions_profile,
-                "analysis_metadata": analysis_metadata,
-                "domain": clean_domain_str
-            }
-            new_profile = CompanyProfile.from_profile_response(clean_domain_str, profile_data)
-            db.add(new_profile)
+            # Optional: Validate using schema classes before saving
+            # profile_obj = CompanyProfileSchema.from_dict(company_profile)
+            # validated_profile = profile_obj.to_dict()
+            # solutions_objs = [SolutionSchema.from_dict(s) for s in solutions_profile]
+            # validated_solutions = [s.to_dict() for s in solutions_objs]
+            
+            new_company = Company(
+                domain=clean_domain_str,
+                profile=company_profile,  # Store raw dict in JSONB
+                solutions=solutions_profile  # Store raw list in JSONB
+            )
+            db.add(new_company)
             db.commit()
-            logger.info(f"✓ Profile auto-saved to database with ID: {new_profile.id}")
+            logger.info(f"✓ Profile auto-saved to database with ID: {new_company.id}")
         except IntegrityError:
             db.rollback()
-            logger.warning(f"Profile already exists in database, skipping auto-save")
+            logger.warning(f"Company already exists in database, skipping auto-save")
         except Exception as e:
             db.rollback()
-            logger.warning(f"Failed to auto-save profile: {e}")
+            logger.warning(f"Failed to auto-save company: {e}")
         
         return ProfileCompetitorsSolutionResponse(
             domain=clean_domain_str,
@@ -578,7 +599,6 @@ async def general_exception_handler(request, exc):
 async def startup_event():
     """Initialize database on startup."""
     logger.info("Initializing database on startup...")
-    init_db()
     logger.info("Database initialization complete")
 
 
