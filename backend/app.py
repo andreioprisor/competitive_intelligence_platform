@@ -19,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm.attributes import flag_modified
 
 from api_clients.gemini_adapter import GeminiAPI
 from database import get_db
@@ -88,6 +89,33 @@ class SaveCompanyProfileResponse(BaseModel):
     profile_id: int = Field(..., description="Database ID of the saved profile")
     domain: str = Field(..., description="Company domain")
     agentic_pipeline_result: Dict[str, Any] = Field(..., description="Result from agentic pipeline (mock for now)")
+
+
+class CompanyProfileUpdateRequest(BaseModel):
+    """Request model for updating company profile."""
+    company_profile: Dict[str, Any] = Field(..., description="Updated company profile data")
+
+
+class SolutionUpdateRequest(BaseModel):
+    """Request model for updating a solution."""
+    solution: Dict[str, Any] = Field(..., description="Solution data to update")
+
+
+class CompetitorCreateRequest(BaseModel):
+    """Request model for adding a competitor."""
+    competitor: Dict[str, Any] = Field(..., description="Competitor data to add")
+
+
+class CategoryObservationRequest(BaseModel):
+    """Request model for recording a category observation."""
+    category_label: str = Field(..., description="Label of the category")
+    description: str = Field(..., description="Detailed description of the observation")
+
+
+class SolutionsComparisonRequest(BaseModel):
+    """Request model for comparing solutions."""
+    company_solution: Dict[str, Any] = Field(..., description="Company's solution data")
+    competitor_solution: Dict[str, Any] = Field(..., description="Competitor's solution data")
 
 
 def load_prompt_template(prompt_name: str) -> str:
@@ -410,11 +438,352 @@ async def save_company_profile(
         )
 
 
+@app.get("/company_profile")
+async def get_company_profile(
+    domain: str = Query(..., description="The domain of the company"),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve company profile information.
+
+    Features:
+    - Caching enabled
+    """
+    clean_domain_str = clean_domain(domain)
+    company = db.query(Company).filter(Company.domain == clean_domain_str).first()
+
+    if company and company.profile:
+        return {
+            "company_profile": company.profile,
+            "cache_hit": True
+        }
+
+    # If not found, generate it
+    logger.info(f"Profile not found in database, generating new analysis for {clean_domain_str}")
+
+    # Initialize Gemini API
+    gemini_api = GeminiAPI(model_id="gemini-3-pro-preview")
+
+    # Generate company profile
+    company_profile = generate_company_profile(gemini_api, clean_domain_str)
+
+    # Save to database
+    if company:
+        company.profile = company_profile
+        db.commit()
+    else:
+        company = Company(
+            domain=clean_domain_str,
+            profile=company_profile,
+            solutions=[]
+        )
+        db.add(company)
+        db.commit()
+        db.refresh(company)
+
+    return {
+        "company_profile": company_profile,
+        "cache_hit": False
+    }
+
+
+@app.put("/company_profile")
+async def update_company_profile(
+    request: CompanyProfileUpdateRequest,
+    domain: str = Query(..., description="The domain of the company"),
+    db: Session = Depends(get_db)
+):
+    """
+    Update company profile information.
+    """
+    clean_domain_str = clean_domain(domain)
+    company = db.query(Company).filter(Company.domain == clean_domain_str).first()
+
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    company.profile = request.company_profile
+    db.commit()
+    return {"status": "success", "message": "Company profile updated"}
+
+
+@app.get("/solutions")
+async def get_solutions(
+    domain: str = Query(..., description="The domain of the company"),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve a list of solutions for a company.
+    """
+    clean_domain_str = clean_domain(domain)
+    company = db.query(Company).filter(Company.domain == clean_domain_str).first()
+
+    if company and company.solutions:
+        return company.solutions
+
+    # If not found or empty, generate it
+    logger.info(f"Solutions not found in database, generating for {clean_domain_str}")
+
+    # We need the company profile first
+    if not company or not company.profile:
+        gemini_api = GeminiAPI(model_id="gemini-3-pro-preview")
+        company_profile = generate_company_profile(gemini_api, clean_domain_str)
+
+        if not company:
+            company = Company(domain=clean_domain_str, profile=company_profile, solutions=[])
+            db.add(company)
+            db.commit()
+            db.refresh(company)
+        else:
+            company.profile = company_profile
+            db.commit()
+    else:
+        company_profile = company.profile
+        gemini_api = GeminiAPI(model_id="gemini-3-pro-preview")
+
+    # Generate solutions
+    solutions_profile = generate_solutions_profile(gemini_api, clean_domain_str, company_profile)
+
+    company.solutions = solutions_profile
+    flag_modified(company, "solutions")
+    db.commit()
+
+    return solutions_profile
+
+
+@app.put("/solutions")
+async def update_solution(
+    request: SolutionUpdateRequest,
+    domain: str = Query(..., description="The domain of the company"),
+    db: Session = Depends(get_db)
+):
+    """
+    Update a solution for a company.
+    """
+    clean_domain_str = clean_domain(domain)
+    company = db.query(Company).filter(Company.domain == clean_domain_str).first()
+
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    current_solutions = company.solutions if company.solutions else []
+    updated_solution = request.solution
+
+    # Try to find and update the solution by Title
+    found = False
+    new_solutions = []
+    target_title = updated_solution.get("Title") or updated_solution.get("title")
+
+    if not target_title:
+        raise HTTPException(status_code=400, detail="Solution must have a Title")
+
+    for sol in current_solutions:
+        current_title = sol.get("Title") or sol.get("title")
+        if current_title == target_title:
+            new_solutions.append(updated_solution)
+            found = True
+        else:
+            new_solutions.append(sol)
+
+    if not found:
+        new_solutions.append(updated_solution)
+
+    company.solutions = new_solutions
+    # Force update for JSONB
+    flag_modified(company, "solutions")
+    db.commit()
+
+    return {"status": "success", "message": "Solution updated"}
+
+
+@app.get("/competitors")
+async def get_competitors(
+    domain: str = Query(..., description="The domain of the company"),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve a list of competitors for a company.
+    """
+    clean_domain_str = clean_domain(domain)
+    company = db.query(Company).filter(Company.domain == clean_domain_str).first()
+
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    competitors = db.query(Competitor).filter(Competitor.company_id == company.id).all()
+
+    result = []
+    for comp in competitors:
+        comp_data = {
+            "domain": comp.domain,
+            "solutions": comp.solutions,
+            "id": comp.id
+        }
+        result.append(comp_data)
+
+    return result
+
+
+@app.post("/competitors")
+async def add_competitor(
+    request: CompetitorCreateRequest,
+    domain: str = Query(..., description="The domain of the company"),
+    db: Session = Depends(get_db)
+):
+    """
+    Add a new competitor for a company.
+    """
+    clean_domain_str = clean_domain(domain)
+    company = db.query(Company).filter(Company.domain == clean_domain_str).first()
+
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    competitor_data = request.competitor
+    comp_domain = competitor_data.get("domain") or competitor_data.get("name")
+
+    if not comp_domain:
+        raise HTTPException(status_code=400, detail="Competitor data must include domain or name")
+
+    # Check if competitor already exists for this company
+    existing = db.query(Competitor).filter(
+        Competitor.company_id == company.id,
+        Competitor.domain == comp_domain
+    ).first()
+
+    if existing:
+        # Update existing
+        existing.solutions = competitor_data.get("solutions", [])
+    else:
+        new_competitor = Competitor(
+            domain=comp_domain,
+            company_id=company.id,
+            solutions=competitor_data.get("solutions", [])
+        )
+        db.add(new_competitor)
+
+    db.commit()
+    return {"status": "success", "message": "Competitor added/updated"}
+
+
+@app.post("/category_observed")
+async def record_category_observation(
+    request: CategoryObservationRequest,
+    domain: str = Query(..., description="The domain of the company"),
+    db: Session = Depends(get_db)
+):
+    """
+    Record a category observation for a company.
+    """
+    clean_domain_str = clean_domain(domain)
+    company = db.query(Company).filter(Company.domain == clean_domain_str).first()
+
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    # Check if criteria exists
+    criteria = db.query(Criteria).filter(
+        Criteria.company_id == company.id,
+        Criteria.name == request.category_label
+    ).first()
+
+    if not criteria:
+        criteria = Criteria(
+            name=request.category_label,
+            definition=request.description,
+            company_id=company.id
+        )
+        db.add(criteria)
+        db.commit()
+        db.refresh(criteria)
+    else:
+        # Update definition if needed
+        criteria.definition = request.description
+        db.commit()
+
+    return {
+        "id": criteria.id,
+        "name": criteria.name,
+        "definition": criteria.definition,
+        "company_id": criteria.company_id
+    }
+
+
+@app.get("/solutions_comparison")
+async def compare_solutions(
+    domain: str = Query(..., description="The domain of the company"),
+    company_solution: str = Query(..., description="The company's solution data (JSON string)"),
+    competitor_solution: str = Query(..., description="The competitor's solution data (JSON string)"),
+    model: str = Query("gemini-3-pro-preview", description="Gemini model to use"),
+    db: Session = Depends(get_db)
+):
+    """
+    Compare solutions between a company and its competitor.
+    """
+    try:
+        clean_domain_str = clean_domain(domain)
+        company = db.query(Company).filter(Company.domain == clean_domain_str).first()
+
+        if not company:
+            company = Company(domain=clean_domain_str)
+            db.add(company)
+            db.commit()
+            db.refresh(company)
+
+        # Parse JSON strings from query parameters
+        try:
+            company_solution_data = json.loads(company_solution)
+            competitor_solution_data = json.loads(competitor_solution)
+        except json.JSONDecodeError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid JSON in solution parameters: {str(e)}")
+
+        comp_sol_name = company_solution_data.get("Title") or company_solution_data.get("title") or "Unknown"
+        competitor_sol_name = competitor_solution_data.get("Title") or competitor_solution_data.get("title") or "Unknown"
+
+        # Check cache
+        cached_comparison = db.query(SolutionComparison).filter(
+            SolutionComparison.company_id == company.id,
+            SolutionComparison.company_solution_name == comp_sol_name,
+            SolutionComparison.competitor_solution_name == competitor_sol_name
+        ).first()
+
+        if cached_comparison:
+            logger.info("Returning cached solution comparison")
+            return {"comparison_result": cached_comparison.comparison_result, "cached": True}
+
+        gemini_api = GeminiAPI(model_id=model)
+
+        template = load_prompt_template("solutions_comparison.md")
+
+        prompt = template.replace("{{COMPANY_SOLUTION}}", json.dumps(company_solution_data, indent=2))
+        prompt = prompt.replace("{{COMPETITOR_SOLUTION}}", json.dumps(competitor_solution_data, indent=2))
+
+        response = gemini_api.get_completion(prompt, model_name=model)
+
+        # Save to cache
+        new_comparison = SolutionComparison(
+            company_id=company.id,
+            company_solution_name=comp_sol_name,
+            competitor_solution_name=competitor_sol_name,
+            comparison_result=response
+        )
+        db.add(new_comparison)
+        db.commit()
+
+        return {"comparison_result": response, "cached": False}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error comparing solutions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """
     Health check endpoint.
-    
+
     Returns:
         HealthResponse: API health status
     """
