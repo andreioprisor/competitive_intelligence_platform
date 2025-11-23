@@ -142,6 +142,7 @@ class AddCriteriaResponse(BaseModel):
 class EnrichCompetitorsRequest(BaseModel):
     """Request model for enriching competitors."""
     domain: str = Field(..., description="Company domain")
+    force_refresh: bool = Field(False, description="Force re-enrichment even if cached data exists")
 
 
 class EnrichCompetitorsResponse(BaseModel):
@@ -810,35 +811,32 @@ async def record_category_observation(
 async def compare_solutions(
     domain: str = Query(..., description="Company domain"),
     competitor_domain: str = Query(..., description="Competitor domain"),
-    company_solution_name: str = Query(..., description="Company solution name"),
     competitor_solution_name: str = Query(..., description="Competitor solution name"),
     db: Session = Depends(get_db)
 ):
     """
-    Compare a company solution with a competitor solution.
+    Compare a competitor solution with the mapped company solution.
 
     This endpoint:
-    1. Finds the company and competitor in the database
-    2. Looks up the specific solutions by name in the competitor's enriched data
-    3. Extracts comparison fields (we_are_better, they_are_better, conclusions, etc.)
-    4. Formats the comparison professionally using LLM
-    5. Returns formatted comparison report
+    1. Finds the competitor in the database
+    2. Looks up the specific solution by name in the competitor's enriched data
+    3. Uses the 'most_similar_to' field to automatically map to company solution
+    4. Returns comparison data (we_are_better, they_are_better, conclusion) directly from DB
 
     Args:
         domain: Company domain
         competitor_domain: Competitor domain
-        company_solution_name: Name of the company's solution
         competitor_solution_name: Name of the competitor's solution
         db: Database session (injected)
 
     Returns:
-        Formatted comparison report with professional presentation
+        Comparison data with mapped company solution and all comparison fields
 
     Raises:
         HTTPException: If company, competitor, or solutions not found
     """
     try:
-        logger.info(f"Comparison request: {company_solution_name} vs {competitor_solution_name}")
+        logger.info(f"Comparison request for competitor solution: {competitor_solution_name}")
 
         # Find company
         clean_domain_str = clean_domain(domain)
@@ -860,101 +858,58 @@ async def compare_solutions(
             )
 
         # Get competitor solutions from JSONB field
-        competitor_solutions = competitor.solutions or []
+        # Handle enriched competitor structure: {"Solutions": [...], "Competitor_Name": "...", ...}
+        competitor_solutions_data = competitor.solutions or {}
+
+        # Extract Solutions array from enriched data
+        if isinstance(competitor_solutions_data, dict) and "Solutions" in competitor_solutions_data:
+            competitor_solutions = competitor_solutions_data.get("Solutions", [])
+        elif isinstance(competitor_solutions_data, list):
+            # Fallback for old format (array of solutions)
+            competitor_solutions = competitor_solutions_data
+        else:
+            competitor_solutions = []
 
         # Find the specific solution by name
         matching_solution = None
         for solution in competitor_solutions:
             if isinstance(solution, dict):
-                sol_name = solution.get("name", "").lower()
+                # Try both "solution_name" (enriched format) and "name" (old format)
+                sol_name = solution.get("solution_name", solution.get("name", "")).lower()
                 if competitor_solution_name.lower() in sol_name or sol_name in competitor_solution_name.lower():
                     matching_solution = solution
                     break
 
         if not matching_solution:
+            # Log available solutions for debugging
+            available_solutions = [
+                sol.get("solution_name", sol.get("name", "Unknown"))
+                for sol in competitor_solutions if isinstance(sol, dict)
+            ]
+            logger.error(f"Solution '{competitor_solution_name}' not found. Available: {available_solutions}")
             raise HTTPException(
                 status_code=404,
-                detail=f"Solution '{competitor_solution_name}' not found for competitor {competitor_domain}"
+                detail=f"Solution '{competitor_solution_name}' not found for competitor {competitor_domain}. Available solutions: {', '.join(available_solutions)}"
             )
 
-        # Extract comparison data
+        # Extract mapped company solution from 'most_similar_to' field
+        company_solution_name = matching_solution.get("most_similar_to", "Unknown Company Solution")
+
+        # Extract comparison data from database
         comparison_data = {
-            "company_solution": company_solution_name,
-            "competitor_solution": competitor_solution_name,
-            "competitor_name": competitor.domain,
-            "we_are_better": matching_solution.get("we_are_better", ""),
-            "they_are_better": matching_solution.get("they_are_better", ""),
-            "conclusions": matching_solution.get("conclusions", ""),
-            "differentiators": matching_solution.get("differentiators", []),
-            "pricing_comparison": matching_solution.get("pricing_comparison", ""),
-            "market_position": matching_solution.get("market_position", ""),
-            "target_customers": matching_solution.get("target_customers", ""),
-        }
-
-        # Format with LLM for professional presentation
-        logger.info("Formatting comparison report with LLM...")
-
-        formatting_prompt = f"""
-You are a professional business analyst creating a competitive intelligence report.
-
-Format the following solution comparison data into a clear, professional, and actionable report.
-
-**Company Solution:** {comparison_data['company_solution']}
-**Competitor Solution:** {comparison_data['competitor_solution']} (by {comparison_data['competitor_name']})
-
-**Our Advantages:**
-{comparison_data['we_are_better']}
-
-**Their Advantages:**
-{comparison_data['they_are_better']}
-
-**Key Differentiators:**
-{', '.join(comparison_data['differentiators']) if comparison_data['differentiators'] else 'N/A'}
-
-**Pricing Comparison:**
-{comparison_data['pricing_comparison']}
-
-**Market Position:**
-{comparison_data['market_position']}
-
-**Target Customers:**
-{comparison_data['target_customers']}
-
-**Strategic Conclusions:**
-{comparison_data['conclusions']}
-
----
-
-Please create a professional, well-structured HTML report with:
-1. Executive Summary (2-3 sentences)
-2. Competitive Positioning Matrix
-3. Our Strengths vs Their Strengths (side-by-side comparison)
-4. Strategic Recommendations (3-5 bullet points)
-5. Key Takeaways
-
-Use professional formatting with headers, bullet points, and emphasis where appropriate.
-The output should be ready to present to stakeholders.
-"""
-
-        # Call Gemini API for formatting
-        gemini_api = GeminiAPI(model_id="gemini-3-pro-preview")
-        formatted_report = gemini_api.get_completion(
-            formatting_prompt,
-            model_name="gemini-2.5-pro",
-            temperature=0.3
-        )
-
-        logger.info("Comparison report formatted successfully")
-
-        return {
             "success": True,
             "company_solution": company_solution_name,
-            "competitor_solution": competitor_solution_name,
-            "competitor_domain": competitor_domain,
-            "raw_data": comparison_data,
-            "formatted_report": formatted_report,
-            "cached": True  # Data from DB
+            "competitor_solution": matching_solution.get("solution_name", competitor_solution_name),
+            "competitor_name": competitor_solutions_data.get("Competitor_Name", competitor.domain),
+            "we_are_better": matching_solution.get("we_are_better", []),
+            "they_are_better": matching_solution.get("they_are_better", []),
+            "conclusion": matching_solution.get("conclusion", []),
+            "cached": True
         }
+
+        logger.info(f"Comparison data retrieved: {company_solution_name} vs {comparison_data['competitor_solution']}")
+
+        return comparison_data
 
     except HTTPException:
         raise
@@ -1140,15 +1095,61 @@ async def enrich_competitors(
     try:
         logger.info(f"Received enrich-competitors request for domain: {request.domain}")
 
+        # Get company from database
+        company = db.query(Company).filter_by(domain=request.domain).first()
+        if not company:
+            raise HTTPException(status_code=404, detail=f"Company not found: {request.domain}")
+
+        # Check if we can return cached data (unless force_refresh is True)
+        if not request.force_refresh:
+            # Query all competitors for this company
+            competitors = db.query(Competitor).filter_by(company_id=company.id).all()
+
+            if competitors:
+                # Check if all competitors have non-empty solutions
+                all_enriched = all(
+                    comp.solutions and len(comp.solutions) > 0
+                    for comp in competitors
+                )
+
+                if all_enriched:
+                    logger.info(f"Returning cached competitor data for {request.domain} ({len(competitors)} competitors)")
+
+                    # Build cached response in same format as enrichment results
+                    cached_results = {
+                        "total": len(competitors),
+                        "successful": len(competitors),
+                        "failed": 0,
+                        "results": [
+                            {
+                                "competitor_domain": comp.domain,
+                                "competitor_id": comp.id,
+                                "success": True,
+                                "data": comp.solutions
+                            }
+                            for comp in competitors
+                        ],
+                        "execution_time_seconds": 0,
+                        "company_name": company.profile.get("name", company.domain) if company.profile else company.domain
+                    }
+
+                    return EnrichCompetitorsResponse(
+                        success=True,
+                        message=f"Returning cached data for {len(competitors)} competitors",
+                        company_id=company.id,
+                        company_name=cached_results['company_name'],
+                        competitors_enriched=len(competitors),
+                        total_competitors=len(competitors),
+                        enrichment_results=cached_results,
+                        execution_time_seconds=0
+                    )
+
         # Run parallel enrichment using simple function
         enrichment_results = await enrich_all_competitors(
             company_domain=request.domain,
             db=db,
             max_concurrent=3
         )
-
-        # Get company for response data
-        company = db.query(Company).filter_by(domain=request.domain).first()
 
         logger.info(f"Enrichment complete in {enrichment_results['execution_time_seconds']:.2f} seconds")
         logger.info(f"Successful: {enrichment_results['successful']}, Failed: {enrichment_results['failed']}")

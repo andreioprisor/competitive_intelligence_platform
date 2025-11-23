@@ -33,8 +33,11 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
     const [addCompetitorModalOpened, setAddCompetitorModalOpened] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(true);
     const [selectedCompetitor, setSelectedCompetitor] = useState<typeof competitors[0] | null>(null);
+    const [selectedCompetitorSolutions, setSelectedCompetitorSolutions] = useState<any>(null);
     const [backendCompetitors, setBackendCompetitors] = useState<CompetitorData[]>([]);
     const [competitorsWithSolutions, setCompetitorsWithSolutions] = useState<Array<{ name: string; website?: string; solutions?: string[] }>>([]);
+    const [competitorsFullData, setCompetitorsFullData] = useState<Array<{ domain: string; solutions: any }>>([]);
+    const [isEnrichingCompetitors, setIsEnrichingCompetitors] = useState(false);
 
     // Organize competitors by category
     const [columns, setColumns] = useState<{ [key: string]: CompetitorData[] }>(() => ({
@@ -69,9 +72,28 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
                 const competitorsWithSols = competitorsFromBackend.map(comp => ({
                     name: comp.domain,
                     website: comp.domain,
-                    solutions: comp.solutions?.map((sol: any) => sol.name || sol) || []
+                    solutions: (() => {
+                        if (Array.isArray(comp.solutions)) {
+                            return comp.solutions.map((sol: any) => sol.name || sol);
+                        } else if (comp.solutions && typeof comp.solutions === 'object') {
+                            // Handle enriched competitor structure with Solutions array
+                            const solutionsObj: any = comp.solutions;
+                            if (Array.isArray(solutionsObj.Solutions)) {
+                                return solutionsObj.Solutions.map((sol: any) => sol.solution_name);
+                            }
+                            // Fallback to object keys
+                            return Object.keys(comp.solutions);
+                        }
+                        return [];
+                    })()
                 }));
                 setCompetitorsWithSolutions(competitorsWithSols);
+
+                // Store full competitor data including solutions JSONB
+                setCompetitorsFullData(competitorsFromBackend.map(comp => ({
+                    domain: comp.domain,
+                    solutions: comp.solutions
+                })));
 
                 // Merge backend competitors into columns by category
                 if (transformedCompetitors.length > 0) {
@@ -304,6 +326,74 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
         setShowInfoModal(false);
     };
 
+    const handleEnrichCompetitors = async (forceRefresh: boolean = false) => {
+        setIsEnrichingCompetitors(true);
+        try {
+            console.log(`Starting competitor enrichment (force_refresh=${forceRefresh})...`);
+            const result = await api.enrichCompetitors(companyData.domain, forceRefresh);
+
+            console.log('Enrichment completed:', result);
+
+            // Reload competitors to get the enriched data
+            const competitorsFromBackend = await api.getCompetitors(companyData.domain);
+
+            // Transform backend format to CompetitorData format
+            const transformedCompetitors: CompetitorData[] = competitorsFromBackend.map(comp => ({
+                name: comp.domain,
+                logoUrl: '',
+                description: `Competitor: ${comp.domain}`,
+                strategies: [],
+                category: 'Direct',
+                website: comp.domain,
+                location: 'Unknown'
+            }));
+
+            setBackendCompetitors(transformedCompetitors);
+
+            // Update competitors with solutions for SolutionComparison component
+            const competitorsWithSols = competitorsFromBackend.map(comp => ({
+                name: comp.domain,
+                website: comp.domain,
+                solutions: (() => {
+                    if (Array.isArray(comp.solutions)) {
+                        return comp.solutions.map((sol: any) => sol.name || sol);
+                    } else if (comp.solutions && typeof comp.solutions === 'object') {
+                        // Handle enriched competitor structure with Solutions array
+                        const solutionsObj: any = comp.solutions;
+                        if (Array.isArray(solutionsObj.Solutions)) {
+                            return solutionsObj.Solutions.map((sol: any) => sol.solution_name);
+                        }
+                        // Fallback to object keys
+                        return Object.keys(comp.solutions);
+                    }
+                    return [];
+                })()
+            }));
+            setCompetitorsWithSolutions(competitorsWithSols);
+
+            // Store full competitor data including solutions JSONB
+            setCompetitorsFullData(competitorsFromBackend.map(comp => ({
+                domain: comp.domain,
+                solutions: comp.solutions
+            })));
+
+            // Show success message
+            alert(`Successfully enriched ${result.competitors_enriched} out of ${result.total_competitors} competitors in ${result.execution_time_seconds.toFixed(2)} seconds!`);
+        } catch (error) {
+            console.error('Failed to enrich competitors:', error);
+            alert(`Failed to enrich competitors: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        } finally {
+            setIsEnrichingCompetitors(false);
+        }
+    };
+
+    const handleCompetitorClick = (competitor: CompetitorData) => {
+        setSelectedCompetitor(competitor);
+        // Find the full solutions data for this competitor
+        const fullData = competitorsFullData.find(c => c.domain === competitor.website || c.domain === competitor.name);
+        setSelectedCompetitorSolutions(fullData?.solutions || null);
+    };
+
     return (
         <Container size="xl" py="xl">
             <Tabs defaultValue="company">
@@ -430,7 +520,7 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
                                                         >
                                                             <CompetitorCard
                                                                 data={competitor}
-                                                                onClick={() => setSelectedCompetitor(competitor)}
+                                                                onClick={() => handleCompetitorClick(competitor)}
                                                                 onDelete={() => handleDeleteCompetitor(competitor, 'Direct')}
                                                             />
                                                         </div>
@@ -459,7 +549,7 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
                                                         >
                                                             <CompetitorCard
                                                                 data={competitor}
-                                                                onClick={() => setSelectedCompetitor(competitor)}
+                                                                onClick={() => handleCompetitorClick(competitor)}
                                                                 onDelete={() => handleDeleteCompetitor(competitor, 'Indirect')}
                                                             />
                                                         </div>
@@ -488,7 +578,7 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
                                                         >
                                                             <CompetitorCard
                                                                 data={competitor}
-                                                                onClick={() => setSelectedCompetitor(competitor)}
+                                                                onClick={() => handleCompetitorClick(competitor)}
                                                                 onDelete={() => handleDeleteCompetitor(competitor, 'Emerging')}
                                                             />
                                                         </div>
@@ -503,20 +593,37 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
                         </Grid>
                     </DragDropContext>
 
-                    <Button
-                        leftSection={<IconPlus size={16} />}
-                        onClick={() => setAddCompetitorModalOpened(true)}
-                        mt="xl"
-                        size="md"
-                        variant="light"
-                    >
-                        Add Competitor
-                    </Button>
+                    <Stack gap="md" mt="xl">
+                        <Button
+                            leftSection={<IconPlus size={16} />}
+                            onClick={() => setAddCompetitorModalOpened(true)}
+                            size="md"
+                            variant="light"
+                        >
+                            Add Competitor
+                        </Button>
+
+                        <Button
+                            leftSection={<IconBulb size={16} />}
+                            onClick={() => handleEnrichCompetitors(false)}
+                            size="md"
+                            variant="filled"
+                            color="blue"
+                            loading={isEnrichingCompetitors}
+                            disabled={isEnrichingCompetitors}
+                        >
+                            {isEnrichingCompetitors ? 'Enriching Competitors...' : 'Enrich All Competitors'}
+                        </Button>
+                    </Stack>
 
                     <CompetitorDetailsModal
                         opened={selectedCompetitor !== null}
-                        onClose={() => setSelectedCompetitor(null)}
+                        onClose={() => {
+                            setSelectedCompetitor(null);
+                            setSelectedCompetitorSolutions(null);
+                        }}
                         competitor={selectedCompetitor}
+                        competitorSolutions={selectedCompetitorSolutions}
                     />
 
                     <AddCompetitorModal

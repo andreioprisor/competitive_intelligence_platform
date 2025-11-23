@@ -266,6 +266,7 @@ async def enrich_all_competitors(
     # Extract company context once (avoid passing ORM objects to async tasks)
     company_profile = company.profile or {}
     company_solutions = company.solutions or []
+    company_name = company_profile.get("name", company_domain) if company_profile else company_domain
 
     # Build list of competitor info (ID + domain only, no ORM objects)
     competitor_info = [(comp.id, comp.domain) for comp in competitors]
@@ -320,7 +321,7 @@ async def enrich_all_competitors(
         "failed": len(failed),
         "results": successful + failed,
         "execution_time_seconds": execution_time,
-        "company_name": company.profile.get("name", company_domain) if company.profile else company_domain
+        "company_name": company_name
     }
 
     logger.info("=" * 80)
