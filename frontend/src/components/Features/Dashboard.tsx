@@ -34,6 +34,7 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
     const [showInfoModal, setShowInfoModal] = useState(true);
     const [selectedCompetitor, setSelectedCompetitor] = useState<typeof competitors[0] | null>(null);
     const [backendCompetitors, setBackendCompetitors] = useState<CompetitorData[]>([]);
+    const [competitorsWithSolutions, setCompetitorsWithSolutions] = useState<Array<{ name: string; website?: string; solutions?: string[] }>>([]);
 
     // Organize competitors by category
     const [columns, setColumns] = useState<{ [key: string]: CompetitorData[] }>(() => ({
@@ -63,6 +64,14 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
                 }));
 
                 setBackendCompetitors(transformedCompetitors);
+
+                // Store competitors with solutions for SolutionComparison component
+                const competitorsWithSols = competitorsFromBackend.map(comp => ({
+                    name: comp.domain,
+                    website: comp.domain,
+                    solutions: comp.solutions?.map((sol: any) => sol.name || sol) || []
+                }));
+                setCompetitorsWithSolutions(competitorsWithSols);
 
                 // Merge backend competitors into columns by category
                 if (transformedCompetitors.length > 0) {
@@ -542,10 +551,8 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
                 <Tabs.Panel value="compareSolutions">
                     <SolutionComparison
                         mySolutions={solutions}
-                        competitors={competitors.map(comp => ({
-                            name: comp.name,
-                            solutions: [] // Competitor solutions not available in current API
-                        }))}
+                        competitors={competitorsWithSolutions}
+                        companyDomain={companyData.domain}
                     />
                 </Tabs.Panel>
 

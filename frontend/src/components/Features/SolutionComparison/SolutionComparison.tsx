@@ -1,6 +1,8 @@
 import { Select, Button, Stack, Paper, Title, Group, Grid } from '@mantine/core';
 import { IconGitCompare } from '@tabler/icons-react';
 import { useState } from 'react';
+import { api } from '../../../services/api';
+import { ComparisonReportModal } from '../ComparisonReportModal/ComparisonReportModal';
 
 interface Solution {
     name: string;
@@ -9,29 +11,60 @@ interface Solution {
 
 interface Competitor {
     name: string;
+    website?: string;
     solutions?: string[];
 }
 
 interface SolutionComparisonProps {
     mySolutions: Solution[];
     competitors: Competitor[];
+    companyDomain: string;
 }
 
-export function SolutionComparison({ mySolutions, competitors }: SolutionComparisonProps) {
+export function SolutionComparison({ mySolutions, competitors, companyDomain }: SolutionComparisonProps) {
     const [selectedMySolution, setSelectedMySolution] = useState<string | null>(null);
     const [selectedCompetitor, setSelectedCompetitor] = useState<string | null>(null);
     const [selectedCompetitorSolution, setSelectedCompetitorSolution] = useState<string | null>(null);
+    const [modalOpened, setModalOpened] = useState(false);
+    const [comparisonReport, setComparisonReport] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
 
     const selectedCompetitorData = competitors.find(c => c.name === selectedCompetitor);
     const competitorSolutions = selectedCompetitorData?.solutions || [];
 
-    const handleCompare = () => {
-        // Placeholder for future comparison logic
-        console.log('Comparing:', {
-            mySolution: selectedMySolution,
-            competitor: selectedCompetitor,
-            competitorSolution: selectedCompetitorSolution
-        });
+    const handleCompare = async () => {
+        if (!selectedMySolution || !selectedCompetitor || !selectedCompetitorSolution) return;
+
+        try {
+            setLoading(true);
+            setModalOpened(true);
+            setComparisonReport(null);
+
+            // Get competitor domain (website)
+            const competitorDomain = selectedCompetitorData?.website || selectedCompetitor;
+
+            console.log('Fetching comparison:', {
+                domain: companyDomain,
+                competitorDomain,
+                companySolution: selectedMySolution,
+                competitorSolution: selectedCompetitorSolution
+            });
+
+            const result = await api.compareSolutions(
+                companyDomain,
+                competitorDomain,
+                selectedMySolution,
+                selectedCompetitorSolution
+            );
+
+            setComparisonReport(result.formatted_report);
+            console.log('Comparison fetched successfully');
+        } catch (error) {
+            console.error('Failed to fetch comparison:', error);
+            setComparisonReport('<p style="color: red;">Failed to load comparison report. Please try again.</p>');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const isCompareDisabled = !selectedMySolution || !selectedCompetitor || !selectedCompetitorSolution;
@@ -103,6 +136,16 @@ export function SolutionComparison({ mySolutions, competitors }: SolutionCompari
                     Compare Solutions
                 </Button>
             </Group>
+
+            <ComparisonReportModal
+                opened={modalOpened}
+                onClose={() => setModalOpened(false)}
+                report={comparisonReport}
+                loading={loading}
+                companySolution={selectedMySolution || ''}
+                competitorSolution={selectedCompetitorSolution || ''}
+                competitorDomain={selectedCompetitorData?.website || selectedCompetitor || ''}
+            />
         </Stack>
     );
 }

@@ -180,17 +180,50 @@ export const api = {
 
     async compareSolutions(
         domain: string,
-        companySolution: any,
-        competitorSolution: any,
-        model: string = 'gemini-3-pro-preview'
-    ): Promise<SolutionsComparisonResponse> {
-        const companySolutionStr = encodeURIComponent(JSON.stringify(companySolution));
-        const competitorSolutionStr = encodeURIComponent(JSON.stringify(competitorSolution));
-        const modelStr = encodeURIComponent(model);
-
+        competitorDomain: string,
+        companySolutionName: string,
+        competitorSolutionName: string
+    ): Promise<{
+        success: boolean;
+        company_solution: string;
+        competitor_solution: string;
+        competitor_domain: string;
+        raw_data: any;
+        formatted_report: string;
+        cached: boolean;
+    }> {
         const response = await fetch(
-            `${API_BASE_URL}/solutions_comparison?domain=${encodeURIComponent(domain)}&company_solution=${companySolutionStr}&competitor_solution=${competitorSolutionStr}&model=${modelStr}`
+            `${API_BASE_URL}/solutions_comparison?` +
+            `domain=${encodeURIComponent(domain)}&` +
+            `competitor_domain=${encodeURIComponent(competitorDomain)}&` +
+            `company_solution_name=${encodeURIComponent(companySolutionName)}&` +
+            `competitor_solution_name=${encodeURIComponent(competitorSolutionName)}`
         );
+
+        if (!response.ok) {
+            throw new Error(`API call failed: ${response.statusText}`);
+        }
+
+        return response.json();
+    },
+
+    async enrichCompetitors(domain: string): Promise<{
+        success: boolean;
+        message: string;
+        company_id: number;
+        company_name: string;
+        competitors_enriched: number;
+        total_competitors: number;
+        enrichment_results: any;
+        execution_time_seconds: number;
+    }> {
+        const response = await fetch(`${API_BASE_URL}/enrich-competitors`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ domain })
+        });
 
         if (!response.ok) {
             throw new Error(`API call failed: ${response.statusText}`);
