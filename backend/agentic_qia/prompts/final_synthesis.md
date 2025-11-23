@@ -84,17 +84,22 @@ Create the final answer that:
 
 {custom_instructions}
 
-## 5. Output Structure
-
-Return a JSON object with the following structure:
-
 ```json
 {
-  "answer": "[comprehensive answer with clear evidence synthesis - provide as much detail as needed]",
+  "answer": "[4-6 sentence answer addressing the datapoint with clear evidence synthesis about the COMPETITOR]",
+  "insights": [
+    "[Short insight 1 about the competitor - one sentence]",
+    "[Short insight 2 about the competitor - one sentence]",
+    "[Short insight 3 about the competitor - one sentence]"
+  ],
+  "suggested_actions": [
+    "[Specific recommendation 1 for YOUR company based on this competitor finding]",
+    "[Specific recommendation 2 for YOUR company based on this competitor finding]"
+  ],
+  "concern_level": [1-5],
+  "concern_rationale": "[Brief explanation of why this datapoint should concern YOUR company at this level]",
   "confidence": [0.0-1.0],
-  "mapping_rationale": "[why this range was selected]",
   "dp_value": "[extracted value if applicable]",
-  "mapped_range": "[selected value range or null]",
   "evidence_summary": {
     "key_findings": [
       "[primary finding 1]",
@@ -113,8 +118,18 @@ Return a JSON object with the following structure:
 **Original User Request:**
 {prompt}
 
-**Company Context:**
+**YOUR COMPANY (for reference and comparison ONLY):**
 {company_context}
+
+**COMPETITOR (TARGET of research - what you analyzed):**
+{competitor_context}
+
+**CRITICAL UNDERSTANDING:**
+- All findings must be ABOUT the competitor
+- Use company_context ONLY for competitive comparison
+- Insights should describe the competitor
+- Suggested actions should be specific recommendations for YOUR company based on competitor findings
+- Concern level indicates how much this competitor datapoint should concern YOUR company
 
 **Datapoint Contract (if applicable):**
 {dp_contract}

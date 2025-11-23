@@ -240,9 +240,12 @@ class CriteriaAnalysisOrchestrator:
 
                 logger.info(f"[{competitor_domain}] Initializing ReactGraph agent")
 
-                # Step 3: Initialize ReactGraph agent
+                # Step 3: Initialize ReactGraph agent with proper context separation
+                # company_context = YOUR company (for reference)
+                # competitor_context = Target competitor (what we're analyzing)
                 agent = ReactGraph(
-                    company_context=competitor_context,
+                    company_context=company_context,
+                    competitor_context=competitor_context,
                     datapoint_context=datapoint_context
                 )
 

@@ -1001,7 +1001,7 @@ def create_simple_tools():
         StructuredTool.from_function(
             func=finalize_sync,
             name="finalize",
-            description="Call when you have gathered sufficient evidence and are ready to conclude research. Provide all your findings with reasoning.",
+            description="Call when you have gathered sufficient evidence and are ready to conclude research. Provide all your findings with reasoning in 4-6 sentences.",
             args_schema=None,
         )
     ]

@@ -40,12 +40,14 @@ class EvidenceSummary(BaseModel):
 
 
 class SynthesisResponse(BaseModel):
-    """Final structured response from synthesis - flattened structure"""
-    answer: str = Field(description="4-6 sentence easy to read non technical answer about the findings")
+    """Final structured response from synthesis - enhanced for competitive intelligence"""
+    answer: str = Field(description="4-6 sentence detailed reasoning about the competitor with evidence")
+    insights: List[str] = Field(description="3-5 short, actionable insights about the competitor (one sentence each)")
+    suggested_actions: List[str] = Field(description="2-4 specific recommendations for YOUR company based on this competitor insight")
+    concern_level: int = Field(ge=1, le=5, description="How much this datapoint should concern your company (1=low, 5=critical)")
+    concern_rationale: str = Field(description="Brief explanation of why this concern level was assigned")
     confidence: float = Field(ge=0.0, le=1.0, description="Confidence score 0.0-1.0")
-    mapping_rationale: str = Field(default="", description="Why this range was selected")
     dp_value: str = Field(default="", description="Extracted datapoint value")
-    mapped_range: str = Field(default="", description="Selected value range from datapoint definition")
     evidence_summary: EvidenceSummary = Field(description="Summary of key findings and limitations")
 
 class ReactGraph:
@@ -59,16 +61,18 @@ class ReactGraph:
     - Budget tracking and enforcement
     """
 
-    def __init__(self, company_context: Dict[str, Any], datapoint_context: Dict[str, Any], prospect: Optional[Any] = None):
+    def __init__(self, company_context: Dict[str, Any], competitor_context: Dict[str, Any], datapoint_context: Dict[str, Any], prospect: Optional[Any] = None):
         """
-        Initialize ReactGraph with company and datapoint context.
+        Initialize ReactGraph with company, competitor and datapoint context.
 
         Args:
-            company_context: Dict with keys: name, domain, industry, size
-            datapoint_context: Dict with keys: dp_name, description/definition, value_ranges
+            company_context: Dict with YOUR company info (for reference)
+            competitor_context: Dict with competitor info (target of research)
+            datapoint_context: Dict with keys: dp_name, description/definition
             prospect: Optional Prospect object with enriched data (for accessing LinkedIn posts, etc.)
         """
         self.company_context = company_context
+        self.competitor_context = competitor_context
         self.datapoint_context = datapoint_context
         self.prospect = prospect
         self.prompts_dir = os.path.join(os.path.dirname(__file__), "prompts")
@@ -152,6 +156,7 @@ class ReactGraph:
         state = {
             "prompt": prompt,
             "company_context": self.company_context,
+            "competitor_context": self.competitor_context,
             "datapoint_definition": self.datapoint_context,
             "tools_registry": format_tools_for_llm(),
 
@@ -258,7 +263,7 @@ You have completed research and gathered evidence. Now synthesize your findings 
 - Ignore data from companies with similar names unless verified
 
 **Output Requirements:**
-- Answer: 4-6 sentences with inline citations like [Source Name]
+- Answer: 4-6 sentences addressing the datapoint with inline citations like [Source Name]
 - Confidence: 0.0-1.0 based on evidence strength
 - Mapping Rationale: Explain why you selected the mapped range
 - Datapoint Value: Exact extracted value if available
@@ -626,6 +631,7 @@ Be concise, factual, and transparent about evidence quality."""
         synthesis_result = node_final_synthesis(
             results=raw_result,
             company_context=self.company_context,
+            competitor_context=self.competitor_context,
             datapoint_definition=self.datapoint_context,
             goal=state["goal"],
             instructions=state["instructions"],
@@ -721,6 +727,7 @@ Be concise, factual, and transparent about evidence quality."""
         synthesis_result = node_final_synthesis(
             results=raw_result,
             company_context=self.company_context,
+            competitor_context=self.competitor_context,
             datapoint_definition=self.datapoint_context,
             goal=state["goal"],
             instructions=state["instructions"],
@@ -868,9 +875,15 @@ if __name__ == "__main__":
     # setup logging
     logging.basicConfig(level=logging.INFO)
     # from pythonjsonlogger import jsonlogger
+    company_context = {
+        "name": "VWO",
+        "domain": "vwo.com",
+        "industry": "SaaS / Conversion Rate Optimization",
+        "size": "200-500 employees"
+    }
 
     # Create ReactGraph with company and datapoint context
-    company_context = {
+    competitor_context = {
         "name": "Omniconvert",
         "domain": "omniconvert.com",
         "industry": "SaaS / Conversion Rate Optimization",
