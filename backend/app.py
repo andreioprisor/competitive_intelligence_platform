@@ -950,6 +950,43 @@ async def compare_solutions(
         )
 
 
+@app.get("/criterias")
+async def get_criterias(
+    domain: str = Query(..., description="Company domain"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get all criterias for a company.
+
+    Args:
+        domain: Company domain
+        db: Database session
+
+    Returns:
+        List of criteria with id, name, definition, created_at
+
+    Raises:
+        HTTPException: 404 if company not found
+    """
+    clean_domain_str = clean_domain(domain)
+    company = db.query(Company).filter_by(domain=clean_domain_str).first()
+
+    if not company:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Company not found for domain: {clean_domain_str}"
+        )
+
+    criterias = db.query(Criteria).filter_by(company_id=company.id).order_by(Criteria.created_at.desc()).all()
+
+    return [{
+        "id": c.id,
+        "name": c.name,
+        "definition": c.definition,
+        "created_at": c.created_at.isoformat()
+    } for c in criterias]
+
+
 @app.post(
     "/add-criteria",
     response_model=AddCriteriaResponse,
@@ -1047,7 +1084,7 @@ async def add_criteria(
 
         # Step 4: Initialize orchestrator
         orchestrator = CriteriaAnalysisOrchestrator(
-            max_concurrency=6,  # Configurable - can be moved to env variable
+            max_concurrency=7,  # Configurable - can be moved to env variable
             db_session=db
         )
 

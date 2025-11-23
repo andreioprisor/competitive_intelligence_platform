@@ -217,11 +217,15 @@ class CriteriaAnalysisOrchestrator:
                 - data: Serialized analysis result (if successful)
                 - error: Error message (if failed)
         """
+        # Extract primitive values upfront to avoid detached instance errors
         competitor_domain = competitor.domain
+        competitor_id = competitor.id
+        criteria_id = criteria.id
+        criteria_name = criteria.name
 
         async with semaphore:
             try:
-                logger.info(f"[{competitor_domain}] Starting analysis for criteria: {criteria.name}")
+                logger.info(f"[{competitor_domain}] Starting analysis for criteria: {criteria_name}")
 
                 # Step 1: Build competitor context
                 competitor_context = {
@@ -263,8 +267,8 @@ class CriteriaAnalysisOrchestrator:
                 # Step 6: Save to database (upsert pattern)
                 try:
                     value_record = self.db.query(Value).filter_by(
-                        criteria_id=criteria.id,
-                        competitor_id=competitor.id
+                        criteria_id=criteria_id,
+                        competitor_id=competitor_id
                     ).first()
 
                     if value_record:
@@ -273,8 +277,8 @@ class CriteriaAnalysisOrchestrator:
                     else:
                         logger.info(f"[{competitor_domain}] Creating new Value record")
                         value_record = Value(
-                            criteria_id=criteria.id,
-                            competitor_id=competitor.id,
+                            criteria_id=criteria_id,
+                            competitor_id=competitor_id,
                             value=serialized
                         )
                         self.db.add(value_record)
@@ -290,7 +294,7 @@ class CriteriaAnalysisOrchestrator:
                 # Step 7: Return success result
                 return {
                     "competitor_domain": competitor_domain,
-                    "competitor_id": competitor.id,
+                    "competitor_id": competitor_id,
                     "success": True,
                     "data": serialized
                 }
@@ -301,7 +305,7 @@ class CriteriaAnalysisOrchestrator:
                 # Return error result (don't raise - let gather continue)
                 return {
                     "competitor_domain": competitor_domain,
-                    "competitor_id": competitor.id if competitor else None,
+                    "competitor_id": competitor_id,
                     "success": False,
                     "error": str(e)
                 }
