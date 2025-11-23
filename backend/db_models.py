@@ -1,76 +1,89 @@
-"""
-Database models for company profiles.
-"""
-
-import logging
-import json
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Index
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import relationship, declarative_base
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Text, JSON
-from sqlalchemy.orm import mapped_column
-from db_config import Base
 
-logger = logging.getLogger(__name__)
+Base = declarative_base()
 
+class Company(Base):
+    __tablename__ = 'companies'
+    
+    id = Column(Integer, primary_key=True)
+    domain = Column(String, unique=True, nullable=False, index=True)
+    solutions = Column(JSONB, default={})
+    profile = Column(JSONB, default={})
+    created_at = Column(DateTime, default=datetime.utcnow)
 
-class CompanyProfile(Base):
-    """
-    SQLAlchemy model for storing company profiles with their analysis data.
-    """
-    __tablename__ = "company_profiles"
     
-    id = Column(Integer, primary_key=True, index=True)
-    
-    # Company identifiers
-    domain = Column(String(255), unique=True, index=True, nullable=False)
-    company_name = Column(String(255), nullable=True)
-    
-    # Full profile data stored as JSON
-    company_profile = Column(JSON, nullable=False)
-    solutions_profile = Column(JSON, nullable=False)
-    analysis_metadata = Column(JSON, nullable=False)
-    
-    # Agentic pipeline result (populated after pipeline runs)
-    agentic_pipeline_result = Column(JSON, nullable=True)
-    
-    # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    # Relationships
+    competitors = relationship("Competitor", back_populates="company", cascade="all, delete-orphan")
+    criterias = relationship("Criteria", back_populates="company", cascade="all, delete-orphan")
     
     def __repr__(self):
-        return f"<CompanyProfile(domain={self.domain}, company_name={self.company_name}, created_at={self.created_at})>"
+        return f"<Company(id={self.id}, domain='{self.domain}')>"
+
+
+class Competitor(Base):
+    __tablename__ = 'competitors'
     
-    @classmethod
-    def from_profile_response(cls, domain: str, response_data: dict):
-        """
-        Create a CompanyProfile instance from a ProfileCompetitorsSolutionResponse.
-        
-        Args:
-            domain: Company domain
-            response_data: Dict with keys: company_profile, solutions_profile, analysis_metadata
-        
-        Returns:
-            CompanyProfile instance
-        """
-        company_name = response_data.get("company_profile", {}).get("name", None)
-        
-        return cls(
-            domain=domain,
-            company_name=company_name,
-            company_profile=response_data.get("company_profile", {}),
-            solutions_profile=response_data.get("solutions_profile", []),
-            analysis_metadata=response_data.get("analysis_metadata", {})
-        )
+    id = Column(Integer, primary_key=True)
+    domain = Column(String, nullable=False, index=True)
+    solutions = Column(JSONB, default={})
+    company_id = Column(Integer, ForeignKey('companies.id', ondelete='CASCADE'), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
     
-    def to_dict(self):
-        """Convert model instance to dictionary."""
-        return {
-            "id": self.id,
-            "domain": self.domain,
-            "company_name": self.company_name,
-            "company_profile": self.company_profile,
-            "solutions_profile": self.solutions_profile,
-            "analysis_metadata": self.analysis_metadata,
-            "agentic_pipeline_result": self.agentic_pipeline_result,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None
-        }
+    # Relationships
+    company = relationship("Company", back_populates="competitors")
+    values = relationship("Value", back_populates="competitor", cascade="all, delete-orphan")
+    
+    # Index for faster lookups
+    __table_args__ = (
+        Index('ix_competitors_company_domain', 'company_id', 'domain'),
+    )
+    
+    def __repr__(self):
+        return f"<Competitor(id={self.id}, domain='{self.domain}', company_id={self.company_id})>"
+
+
+class Criteria(Base):
+    __tablename__ = 'criterias'
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    definition = Column(String)
+    company_id = Column(Integer, ForeignKey('companies.id', ondelete='CASCADE'), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    company = relationship("Company", back_populates="criterias")
+    values = relationship("Value", back_populates="criteria", cascade="all, delete-orphan")
+    
+    # Index for faster lookups
+    __table_args__ = (
+        Index('ix_criterias_company_name', 'company_id', 'name'),
+    )
+    
+    def __repr__(self):
+        return f"<Criteria(id={self.id}, name='{self.name}', company_id={self.company_id})>"
+
+
+class Value(Base):
+    __tablename__ = 'values'
+    
+    id = Column(Integer, primary_key=True)
+    criteria_id = Column(Integer, ForeignKey('criterias.id', ondelete='CASCADE'), nullable=False)
+    competitor_id = Column(Integer, ForeignKey('competitors.id', ondelete='CASCADE'), nullable=False)
+    value = Column(JSONB, default={})
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    criteria = relationship("Criteria", back_populates="values")
+    competitor = relationship("Competitor", back_populates="values")
+    
+    # Indexes for faster lookups
+    __table_args__ = (
+        Index('ix_values_criteria_competitor', 'criteria_id', 'competitor_id', unique=True),
+    )
+    
+    def __repr__(self):
+        return f"<Value(id={self.id}, criteria_id={self.criteria_id}, competitor_id={self.competitor_id})>"
