@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Index
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Index, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship, declarative_base
 from datetime import datetime
@@ -27,7 +27,7 @@ class Competitor(Base):
     __tablename__ = 'competitors'
     
     id = Column(Integer, primary_key=True)
-    domain = Column(String, nullable=False, index=True)
+    domain = Column(String, unique=True,nullable=False, index=True)
     solutions = Column(JSONB, default={})
     company_id = Column(Integer, ForeignKey('companies.id', ondelete='CASCADE'), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -39,6 +39,7 @@ class Competitor(Base):
     # Index for faster lookups
     __table_args__ = (
         Index('ix_competitors_company_domain', 'company_id', 'domain'),
+        UniqueConstraint('company_id', 'domain', name='uq_competitor_company_domain'),
     )
     
     def __repr__(self):
