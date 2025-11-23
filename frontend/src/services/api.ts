@@ -29,6 +29,26 @@ export interface CategoryObservationResponse {
     company_id: number;
 }
 
+export interface AddCriteriaRequest {
+    domain: string;
+    criteria_name: string;
+    criteria_definition: string;
+    value_ranges?: Record<string, string>;
+}
+
+export interface AddCriteriaResponse {
+    success: boolean;
+    message: string;
+    criteria_id: number;
+    criteria_name: string;
+    company_id: number;
+    company_name: string;
+    competitors_analyzed: number;
+    total_competitors: number;
+    analysis_results: Record<string, any>;
+    execution_time_seconds: number;
+}
+
 export interface CompetitorResponse {
     domain: string;
     solutions: any[];
@@ -190,6 +210,22 @@ export const api = {
         return response.json();
     },
 
+    async enrichCompetitors(request: { domain: string }): Promise<any> {
+        const response = await fetch(`${API_BASE_URL}/enrich-competitors`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(request)
+        });
+
+        if (!response.ok) {
+            throw new Error(`API call failed: ${response.statusText}`);
+        }
+
+        return response.json();
+    },
+
     async recordCategoryObservation(domain: string, data: CategoryObservationRequest): Promise<CategoryObservationResponse> {
         const response = await fetch(`${API_BASE_URL}/category_observed?domain=${encodeURIComponent(domain)}`, {
             method: 'POST',
@@ -197,6 +233,38 @@ export const api = {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify(data)
+        });
+
+        if (!response.ok) {
+            throw new Error(`API call failed: ${response.statusText}`);
+        }
+
+        return response.json();
+    },
+
+    async addCriteria(request: AddCriteriaRequest): Promise<AddCriteriaResponse> {
+        const response = await fetch(`${API_BASE_URL}/add-criteria`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(request)
+        });
+
+        if (!response.ok) {
+            throw new Error(`API call failed: ${response.statusText}`);
+        }
+
+        return response.json();
+    },
+
+    async getTimeline(filters: TimelineRequest = {}): Promise<TimelineResponse> {
+        const response = await fetch(`${API_BASE_URL}/timeline`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(filters)
         });
 
         if (!response.ok) {

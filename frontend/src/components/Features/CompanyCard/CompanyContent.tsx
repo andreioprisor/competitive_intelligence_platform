@@ -7,8 +7,6 @@ interface CompanyContentProps {
     differentiators: string;
     services: string;
     businessModel: string;
-    onSave?: (description: string) => Promise<void>;
-    isSaved?: boolean;
 }
 
 export function CompanyContent({
@@ -16,17 +14,13 @@ export function CompanyContent({
     employees,
     differentiators,
     services,
-    businessModel,
-    onSave,
-    isSaved = false
+    businessModel
 }: CompanyContentProps) {
     const [description, setDescription] = useState(initialDescription);
     const [isEditing, setIsEditing] = useState(false);
     const [draftDescription, setDraftDescription] = useState(description);
-    const [isSaving, setIsSaving] = useState(false);
 
     const handleStartEdit = () => {
-        if (isSaved) return; // Prevent editing after save
         setDraftDescription(description);
         setIsEditing(true);
     };
@@ -38,16 +32,6 @@ export function CompanyContent({
 
     const handleCancel = () => {
         setIsEditing(false);
-    };
-
-    const handleSaveProfile = async () => {
-        if (!onSave) return;
-        setIsSaving(true);
-        try {
-            await onSave(description);
-        } finally {
-            setIsSaving(false);
-        }
     };
 
     return (
@@ -71,28 +55,16 @@ export function CompanyContent({
                     mb="md"
                     onClick={handleStartEdit}
                     style={{
-                        cursor: isSaved ? 'default' : 'pointer',
+                        cursor: 'pointer',
                         border: '1px dashed transparent'
                     }}
-                    onMouseEnter={(e) => !isSaved && (e.currentTarget.style.borderColor = 'var(--mantine-color-dimmed)')}
+                    onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--mantine-color-dimmed)'}
                     onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}
                     p="xs"
-                    title={isSaved ? '' : 'Click to edit description'}
+                    title="Click to edit description"
                 >
                     {description}
                 </Text>
-            )}
-
-            {!isSaved && onSave && (
-                <Group justify="flex-end" mb="md">
-                    <Button
-                        onClick={handleSaveProfile}
-                        loading={isSaving}
-                        size="md"
-                    >
-                        Save Profile
-                    </Button>
-                </Group>
             )}
 
             <Grid>
