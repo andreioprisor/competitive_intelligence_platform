@@ -12,7 +12,7 @@ import { AddSolutionModal } from './AddSolutionModal/AddSolutionModal';
 import { CompetitorDetailsModal } from './CompetitorDetailsModal/CompetitorDetailsModal';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { DropResult } from '@hello-pangea/dnd';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 import type { CompanyData, SolutionData, CompetitorData } from '../../utils/mapper';
 import type { CompanyAnalysisResponse } from '../../services/api';
@@ -31,6 +31,7 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
     const [addSolutionModalOpened, setAddSolutionModalOpened] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(true);
     const [selectedCompetitor, setSelectedCompetitor] = useState<typeof competitors[0] | null>(null);
+    const [backendCompetitors, setBackendCompetitors] = useState<CompetitorData[]>([]);
 
     // Organize competitors by category
     const [columns, setColumns] = useState<{ [key: string]: CompetitorData[] }>(() => ({
@@ -38,6 +39,35 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
         Indirect: competitors.filter(c => c.category === 'Indirect'),
         Emerging: competitors.filter(c => c.category === 'Emerging'),
     }));
+
+    // Load competitors from backend when component mounts and company is saved
+    useEffect(() => {
+        if (!isSaved) return;
+
+        const loadCompetitors = async () => {
+            try {
+                const competitorsFromBackend = await api.getCompetitors(companyData.domain);
+                console.log('Loaded competitors from backend:', competitorsFromBackend);
+
+                // Transform backend format to CompetitorData format
+                const transformedCompetitors: CompetitorData[] = competitorsFromBackend.map(comp => ({
+                    name: comp.domain,
+                    logoUrl: '',
+                    description: `Competitor: ${comp.domain}`,
+                    strategies: [],
+                    category: 'Direct', // Default category
+                    website: comp.domain,
+                    location: 'Unknown'
+                }));
+
+                setBackendCompetitors(transformedCompetitors);
+            } catch (error) {
+                console.error('Failed to load competitors from backend:', error);
+            }
+        };
+
+        loadCompetitors();
+    }, [isSaved, companyData.domain]);
 
     const onDragEnd = (result: DropResult) => {
         const { source, destination } = result;
@@ -80,42 +110,61 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
     const [customMetricValues, setCustomMetricValues] = useState<Record<string, Record<string, string>>>({});
     const [loadingCategories, setLoadingCategories] = useState<Set<string>>(new Set());
 
-    const handleAddCategory = (newCategory: { label: string; description: string }) => {
+    const handleAddCategory = async (newCategory: { label: string; description: string }) => {
         const id = `custom-${Date.now()}`;
         const categoryToAdd = { ...newCategory, id, isSystem: false };
 
         setCustomCategories(prev => [...prev, categoryToAdd]);
         setLoadingCategories(prev => new Set(prev).add(id));
 
-        // Simulate NLP data fetching
-        setTimeout(() => {
-            const mockValues: Record<string, string> = {};
-            const allCompanies = [
-                { name: companyData.name },
-                ...MOCK_COMPETITORS
-            ];
-
-            allCompanies.forEach(company => {
-                if (categoryToAdd.label.toLowerCase().includes('rate') || categoryToAdd.label.toLowerCase().includes('%')) {
-                    mockValues[company.name] = `${Math.floor(Math.random() * 80 + 10)}%`;
-                } else if (categoryToAdd.label.toLowerCase().includes('score')) {
-                    mockValues[company.name] = `${Math.floor(Math.random() * 50 + 50)}/100`;
-                } else {
-                    mockValues[company.name] = ['High', 'Medium', 'Low', 'Very High'][Math.floor(Math.random() * 4)];
-                }
+        try {
+            // Call the backend API to record category observation
+            const response = await api.recordCategoryObservation(companyData.domain, {
+                category_label: newCategory.label,
+                description: newCategory.description
             });
 
-            setCustomMetricValues(prev => ({
-                ...prev,
-                [id]: mockValues
-            }));
+            console.log('Category observation recorded:', response);
 
+            // Simulate NLP data fetching (this could be replaced with real AI-generated values from backend)
+            setTimeout(() => {
+                const mockValues: Record<string, string> = {};
+                const allCompanies = [
+                    { name: companyData.name },
+                    ...MOCK_COMPETITORS
+                ];
+
+                allCompanies.forEach(company => {
+                    if (categoryToAdd.label.toLowerCase().includes('rate') || categoryToAdd.label.toLowerCase().includes('%')) {
+                        mockValues[company.name] = `${Math.floor(Math.random() * 80 + 10)}%`;
+                    } else if (categoryToAdd.label.toLowerCase().includes('score')) {
+                        mockValues[company.name] = `${Math.floor(Math.random() * 50 + 50)}/100`;
+                    } else {
+                        mockValues[company.name] = ['High', 'Medium', 'Low', 'Very High'][Math.floor(Math.random() * 4)];
+                    }
+                });
+
+                setCustomMetricValues(prev => ({
+                    ...prev,
+                    [id]: mockValues
+                }));
+
+                setLoadingCategories(prev => {
+                    const next = new Set(prev);
+                    next.delete(id);
+                    return next;
+                });
+            }, 2500);
+        } catch (error) {
+            console.error('Failed to record category observation:', error);
+            // Remove loading state on error
             setLoadingCategories(prev => {
                 const next = new Set(prev);
                 next.delete(id);
                 return next;
             });
-        }, 2500);
+            // TODO: Show error notification
+        }
     };
 
     const handleDeleteCategory = (id: string) => {
@@ -149,10 +198,16 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
         }
     };
 
-    const handleAddSolution = (newSolution: any) => {
+    const handleAddSolution = async (newSolution: any) => {
         setSolutions(prev => [...prev, newSolution]);
-        // TODO: Add API call to save solution
-        console.log('New solution added:', newSolution);
+
+        try {
+            await api.updateSolution(companyData.domain, { solution: newSolution });
+            console.log('Solution saved successfully:', newSolution);
+        } catch (error) {
+            console.error('Failed to save solution:', error);
+            // TODO: Show error notification and revert state
+        }
     };
 
     const handleCloseInfoModal = () => {
