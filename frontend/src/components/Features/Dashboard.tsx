@@ -1,4 +1,4 @@
-import { Tabs, Grid, Container, Title, Text, Stack, Button } from '@mantine/core';
+import { Tabs, Grid, Container, Title, Text, Stack, Card, Modal, Button } from '@mantine/core';
 import { IconBuildingSkyscraper, IconUsers, IconBulb, IconPlus, IconChartBar, IconGitCompare, IconTimeline, IconSettings } from '@tabler/icons-react';
 import { MOCK_COMPETITORS, MOCK_SOLUTIONS, MOCK_TIMELINE_ALERTS } from '../../data/mockData';
 import { CompanyCard } from './CompanyCard/CompanyCard';
@@ -8,22 +8,36 @@ import { ComparisonTable } from './ComparisonTable/ComparisonTable';
 import { SolutionComparison } from './SolutionComparison/SolutionComparison';
 import { Timeline } from './Timeline/Timeline';
 import { UserPreferences } from './UserPreferences/UserPreferences';
+import { AddSolutionModal } from './AddSolutionModal/AddSolutionModal';
+import { CompetitorDetailsModal } from './CompetitorDetailsModal/CompetitorDetailsModal';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { DropResult } from '@hello-pangea/dnd';
 import { useState } from 'react';
 
-import type { CompanyData } from '../../utils/mapper';
+import type { CompanyData, SolutionData, CompetitorData } from '../../utils/mapper';
+import type { CompanyAnalysisResponse } from '../../services/api';
+import { api } from '../../services/api';
 
 interface DashboardProps {
     companyData: CompanyData;
+    apiResponse: CompanyAnalysisResponse;
+    solutions: SolutionData[];
+    competitors: CompetitorData[];
 }
 
-export function Dashboard({ companyData }: DashboardProps) {
-    const [columns, setColumns] = useState<{ [key: string]: typeof MOCK_COMPETITORS }>({
-        Direct: MOCK_COMPETITORS.filter(c => c.category === 'Direct'),
-        Indirect: MOCK_COMPETITORS.filter(c => c.category === 'Indirect'),
-        Emerging: MOCK_COMPETITORS.filter(c => c.category === 'Emerging'),
-    });
+export function Dashboard({ companyData, apiResponse, solutions: initialSolutions, competitors }: DashboardProps) {
+    const [isSaved, setIsSaved] = useState(false);
+    const [solutions, setSolutions] = useState(initialSolutions);
+    const [addSolutionModalOpened, setAddSolutionModalOpened] = useState(false);
+    const [showInfoModal, setShowInfoModal] = useState(true);
+    const [selectedCompetitor, setSelectedCompetitor] = useState<typeof competitors[0] | null>(null);
+
+    // Organize competitors by category
+    const [columns, setColumns] = useState<{ [key: string]: CompetitorData[] }>(() => ({
+        Direct: competitors.filter(c => c.category === 'Direct'),
+        Indirect: competitors.filter(c => c.category === 'Indirect'),
+        Emerging: competitors.filter(c => c.category === 'Emerging'),
+    }));
 
     const onDragEnd = (result: DropResult) => {
         const { source, destination } = result;
@@ -113,6 +127,38 @@ export function Dashboard({ companyData }: DashboardProps) {
         });
     };
 
+    const handleSaveProfile = async (updatedDescription: string) => {
+        try {
+            // Update the description in the API response
+            const updatedResponse = {
+                ...apiResponse,
+                company_profile: {
+                    ...apiResponse.company_profile,
+                    core_business: {
+                        ...apiResponse.company_profile.core_business,
+                        company_overview: updatedDescription
+                    }
+                }
+            };
+
+            await api.saveCompanyProfile(updatedResponse);
+            setIsSaved(true);
+        } catch (error) {
+            console.error('Failed to save company profile:', error);
+            // TODO: Show error notification
+        }
+    };
+
+    const handleAddSolution = (newSolution: any) => {
+        setSolutions(prev => [...prev, newSolution]);
+        // TODO: Add API call to save solution
+        console.log('New solution added:', newSolution);
+    };
+
+    const handleCloseInfoModal = () => {
+        setShowInfoModal(false);
+    };
+
     return (
         <Container size="xl" py="xl">
             <Tabs defaultValue="company">
@@ -120,53 +166,104 @@ export function Dashboard({ companyData }: DashboardProps) {
                     <Tabs.Tab value="company" leftSection={<IconBuildingSkyscraper size={16} />}>
                         Company Info
                     </Tabs.Tab>
-                    <Tabs.Tab value="solutions" leftSection={<IconBulb size={16} />}>
-                        My Solutions
-                    </Tabs.Tab>
-                    <Tabs.Tab value="competitors" leftSection={<IconUsers size={16} />}>
-                        Competitors
-                    </Tabs.Tab>
-                    <Tabs.Tab value="compare" leftSection={<IconChartBar size={16} />}>
-                        Compare
-                    </Tabs.Tab>
-                    <Tabs.Tab value="compareSolutions" leftSection={<IconGitCompare size={16} />}>
-                        Compare Solutions
-                    </Tabs.Tab>
-                    <Tabs.Tab value="timeline" leftSection={<IconTimeline size={16} />}>
-                        Timeline
-                    </Tabs.Tab>
-                    <Tabs.Tab value="userPreferences" ml="auto" leftSection={<IconSettings size={16} />}>
-                        User Preferences
-                    </Tabs.Tab>
+                    {isSaved && (
+                        <>
+                            <Tabs.Tab value="solutions" leftSection={<IconBulb size={16} />}>
+                                My Solutions
+                            </Tabs.Tab>
+                            <Tabs.Tab value="competitors" leftSection={<IconUsers size={16} />}>
+                                Competitors
+                            </Tabs.Tab>
+                            <Tabs.Tab value="compare" leftSection={<IconChartBar size={16} />}>
+                                Compare
+                            </Tabs.Tab>
+                            <Tabs.Tab value="compareSolutions" leftSection={<IconGitCompare size={16} />}>
+                                Compare Solutions
+                            </Tabs.Tab>
+                            <Tabs.Tab value="timeline" leftSection={<IconTimeline size={16} />}>
+                                Timeline
+                            </Tabs.Tab>
+                            <Tabs.Tab value="userPreferences" ml="auto" leftSection={<IconSettings size={16} />}>
+                                User Preferences
+                            </Tabs.Tab>
+                        </>
+                    )}
                 </Tabs.List>
 
                 <Tabs.Panel value="company">
+                    <Modal
+                        opened={showInfoModal && !isSaved}
+                        onClose={handleCloseInfoModal}
+                        title="Company Information"
+                        centered
+                        size="md"
+                    >
+                        <Stack gap="md">
+                            <Text>
+                                This is the current status of the company info. Modify accordingly if necessary, and press "Save" to continue.
+                            </Text>
+                            <Button onClick={handleCloseInfoModal} fullWidth>
+                                Got it
+                            </Button>
+                        </Stack>
+                    </Modal>
+
                     <Grid>
                         <Grid.Col span={{ base: 12, md: 8 }}>
-                            <CompanyCard data={companyData} />
+                            <CompanyCard
+                                data={companyData}
+                                onSave={handleSaveProfile}
+                                isSaved={isSaved}
+                            />
                         </Grid.Col>
                     </Grid>
                 </Tabs.Panel>
 
                 <Tabs.Panel value="solutions">
                     <Grid>
-                        {MOCK_SOLUTIONS.map((solution, index) => (
+                        {solutions.map((solution, index) => (
                             <Grid.Col key={index} span={{ base: 12, md: 4 }}>
                                 <SolutionCard data={solution} />
                             </Grid.Col>
                         ))}
                         <Grid.Col span={{ base: 12, md: 4 }}>
-                            <Button
-                                variant="outline"
+                            <Card
+                                withBorder
+                                padding="lg"
+                                radius="md"
                                 h="100%"
-                                w="100%"
-                                style={{ borderStyle: 'dashed' }}
-                                leftSection={<IconPlus size={20} />}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s ease',
+                                    borderStyle: 'dashed',
+                                    borderWidth: '2px'
+                                }}
+                                onClick={() => setAddSolutionModalOpened(true)}
+                                onMouseEnter={(e) => {
+                                    e.currentTarget.style.borderColor = 'var(--mantine-color-blue-6)';
+                                    e.currentTarget.style.backgroundColor = 'var(--mantine-color-blue-0)';
+                                }}
+                                onMouseLeave={(e) => {
+                                    e.currentTarget.style.borderColor = '';
+                                    e.currentTarget.style.backgroundColor = '';
+                                }}
                             >
-                                Add Solution
-                            </Button>
+                                <Stack align="center" gap="xs">
+                                    <IconPlus size={32} style={{ opacity: 0.6 }} />
+                                    <Text size="lg" fw={500} c="dimmed">Add Solution</Text>
+                                </Stack>
+                            </Card>
                         </Grid.Col>
                     </Grid>
+
+                    <AddSolutionModal
+                        opened={addSolutionModalOpened}
+                        onClose={() => setAddSolutionModalOpened(false)}
+                        onAdd={handleAddSolution}
+                    />
                 </Tabs.Panel>
 
                 <Tabs.Panel value="competitors">
@@ -186,7 +283,10 @@ export function Dashboard({ companyData }: DashboardProps) {
                                                             {...provided.draggableProps}
                                                             {...provided.dragHandleProps}
                                                         >
-                                                            <CompetitorCard data={competitor} />
+                                                            <CompetitorCard
+                                                                data={competitor}
+                                                                onClick={() => setSelectedCompetitor(competitor)}
+                                                            />
                                                         </div>
                                                     )}
                                                 </Draggable>
@@ -211,7 +311,10 @@ export function Dashboard({ companyData }: DashboardProps) {
                                                             {...provided.draggableProps}
                                                             {...provided.dragHandleProps}
                                                         >
-                                                            <CompetitorCard data={competitor} />
+                                                            <CompetitorCard
+                                                                data={competitor}
+                                                                onClick={() => setSelectedCompetitor(competitor)}
+                                                            />
                                                         </div>
                                                     )}
                                                 </Draggable>
@@ -236,7 +339,10 @@ export function Dashboard({ companyData }: DashboardProps) {
                                                             {...provided.draggableProps}
                                                             {...provided.dragHandleProps}
                                                         >
-                                                            <CompetitorCard data={competitor} />
+                                                            <CompetitorCard
+                                                                data={competitor}
+                                                                onClick={() => setSelectedCompetitor(competitor)}
+                                                            />
                                                         </div>
                                                     )}
                                                 </Draggable>
@@ -248,6 +354,12 @@ export function Dashboard({ companyData }: DashboardProps) {
                             </Grid.Col>
                         </Grid>
                     </DragDropContext>
+
+                    <CompetitorDetailsModal
+                        opened={selectedCompetitor !== null}
+                        onClose={() => setSelectedCompetitor(null)}
+                        competitor={selectedCompetitor}
+                    />
                 </Tabs.Panel>
 
                 <Tabs.Panel value="compare">
@@ -274,8 +386,11 @@ export function Dashboard({ companyData }: DashboardProps) {
 
                 <Tabs.Panel value="compareSolutions">
                     <SolutionComparison
-                        mySolutions={MOCK_SOLUTIONS}
-                        competitors={MOCK_COMPETITORS}
+                        mySolutions={solutions}
+                        competitors={competitors.map(comp => ({
+                            name: comp.name,
+                            solutions: [] // Competitor solutions not available in current API
+                        }))}
                     />
                 </Tabs.Panel>
 

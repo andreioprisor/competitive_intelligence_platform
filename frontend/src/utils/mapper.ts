@@ -22,6 +22,25 @@ export interface CompanyData {
     industryTrends: string[];
 }
 
+export interface SolutionData {
+    name: string;
+    description: string;
+    industries: string[];
+    features: string[];
+    benefits: string[];
+    useCases: string[];
+}
+
+export interface CompetitorData {
+    name: string;
+    logoUrl: string;
+    description: string;
+    strategies: string[];
+    category: string;
+    website: string;
+    location: string;
+}
+
 export const mapApiResponseToCompanyData = (response: CompanyAnalysisResponse): CompanyData => {
     const profile = response.company_profile;
     const coreBusiness = profile.core_business || {};
@@ -59,4 +78,47 @@ export const mapApiResponseToCompanyData = (response: CompanyAnalysisResponse): 
         businessModel: coreBusiness.business_model || 'Unknown',
         industryTrends: Array.isArray(marketContext.industry_trends) ? marketContext.industry_trends.slice(0, 3) : []
     };
+};
+
+export const mapApiResponseToSolutions = (response: CompanyAnalysisResponse): SolutionData[] => {
+    if (!response.solutions_profile || !Array.isArray(response.solutions_profile)) {
+        return [];
+    }
+
+    return response.solutions_profile.map((solution: any) => ({
+        name: solution.Title || 'Unnamed Solution',
+        description: solution.Description || '',
+        industries: Array.isArray(solution.Target_Industries) ? solution.Target_Industries : [],
+        features: Array.isArray(solution.Features) ? solution.Features.slice(0, 5) : [],
+        benefits: Array.isArray(solution.Benefits) ? solution.Benefits.slice(0, 3) : [],
+        useCases: Array.isArray(solution.Use_Cases) ? solution.Use_Cases.slice(0, 3) : []
+    }));
+};
+
+export const mapApiResponseToCompetitors = (response: CompanyAnalysisResponse): CompetitorData[] => {
+    const competitors = response.company_profile?.competitors;
+
+    if (!competitors || !Array.isArray(competitors)) {
+        return [];
+    }
+
+    return competitors.map((competitor: any) => {
+        // Determine category based on type
+        let category = 'Emerging';
+        if (competitor.type === 'direct') {
+            category = 'Direct';
+        } else if (competitor.type === 'indirect') {
+            category = 'Indirect';
+        }
+
+        return {
+            name: competitor.company_name || 'Unknown Company',
+            logoUrl: competitor.website ? `https://logo.clearbit.com/${competitor.website}` : '',
+            description: `${competitor.company_name} is a competitor based in ${competitor.location || 'Unknown location'}.`,
+            strategies: [], // Not provided in API, could be populated later
+            category: category,
+            website: competitor.website || '',
+            location: competitor.location || 'Unknown'
+        };
+    });
 };

@@ -15,7 +15,7 @@ const STEPS = [
     "Social media Agent"
 ];
 
-export function LoadingModal({ opened, onComplete }: LoadingModalProps) {
+export function LoadingModal({ opened }: LoadingModalProps) {
     const [activeStep, setActiveStep] = useState(0);
     const [progress, setProgress] = useState(0);
 

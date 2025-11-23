@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 interface Solution {
     name: string;
+    industries?: string[];
 }
 
 interface Competitor {
