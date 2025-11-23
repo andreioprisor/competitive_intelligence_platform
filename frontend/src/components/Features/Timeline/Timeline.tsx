@@ -188,9 +188,11 @@ export function Timeline({ domain, isActive }: TimelineProps) {
                                                         <Text size="xs" c="dimmed">{formatDate(item.created_at)}</Text>
                                                     </Group>
                                                 </Group>
-                                                <Title order={5}>{item.criteria_name}</Title>
-                                                <Text size="sm" c="dimmed" lineClamp={2}>
-                                                    {item.value?.dp_value || answer}
+                                                <Title order={5} lineClamp={2}>
+                                                    {item.value?.most_important_takeaway || item.criteria_name}
+                                                </Title>
+                                                <Text size="xs" c="dimmed">
+                                                    {item.criteria_name}
                                                 </Text>
                                             </Stack>
                                         </Group>
