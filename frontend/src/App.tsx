@@ -5,21 +5,32 @@ import { LandingPage } from './components/Features/LandingPage';
 import { LoadingModal } from './components/Features/LoadingModal';
 import { Dashboard } from './components/Features/Dashboard';
 import { api } from './services/api';
-import { mapApiResponseToCompanyData } from './utils/mapper';
-import type { CompanyData } from './utils/mapper';
+import { mapApiResponseToCompanyData, mapApiResponseToSolutions, mapApiResponseToCompetitors } from './utils/mapper';
+import type { CompanyData, SolutionData, CompetitorData } from './utils/mapper';
+import type { CompanyAnalysisResponse } from './services/api';
 
 function App() {
   const [view, setView] = useState<'landing' | 'dashboard'>('landing');
   const [loading, setLoading] = useState(false);
   const [companyData, setCompanyData] = useState<CompanyData | null>(null);
+  const [apiResponse, setApiResponse] = useState<CompanyAnalysisResponse | null>(null);
+  const [solutions, setSolutions] = useState<SolutionData[]>([]);
+  const [competitors, setCompetitors] = useState<CompetitorData[]>([]);
 
   const handleSearch = async (domain: string) => {
     setLoading(true);
     try {
       const response = await api.fetchCompanyAnalysis(domain);
+      setApiResponse(response);
       const data = mapApiResponseToCompanyData(response);
+      const solutionsData = mapApiResponseToSolutions(response);
+      const competitorsData = mapApiResponseToCompetitors(response);
       console.log(data);
+      console.log('Solutions:', solutionsData);
+      console.log('Competitors:', competitorsData);
       setCompanyData(data);
+      setSolutions(solutionsData);
+      setCompetitors(competitorsData);
       setView('dashboard');
     } catch (error) {
       console.error('Failed to fetch company data:', error);
@@ -40,7 +51,14 @@ function App() {
         {view === 'landing' ? (
           <LandingPage onSearch={handleSearch} />
         ) : (
-          companyData && <Dashboard companyData={companyData} />
+          companyData && apiResponse && (
+            <Dashboard
+              companyData={companyData}
+              apiResponse={apiResponse}
+              solutions={solutions}
+              competitors={competitors}
+            />
+          )
         )}
       </AppShell.Main>
 

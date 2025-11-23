@@ -16,5 +16,21 @@ export const api = {
         }
 
         return response.json();
+    },
+
+    async saveCompanyProfile(data: CompanyAnalysisResponse): Promise<any> {
+        const response = await fetch(`${API_BASE_URL}/save_company_profile`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+
+        if (!response.ok) {
+            throw new Error(`API call failed: ${response.statusText}`);
+        }
+
+        return response.json();
     }
 };

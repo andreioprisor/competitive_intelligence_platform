@@ -1,4 +1,4 @@
-import { Stack, Title, MultiSelect, Card, Text, Badge, Group, Timeline as MantineTimeline } from '@mantine/core';
+import { Stack, Title, MultiSelect, Card, Text, Badge, Group, Timeline as MantineTimeline, Avatar } from '@mantine/core';
 import { IconClock, IconBell } from '@tabler/icons-react';
 import { useState, useMemo } from 'react';
 
@@ -55,6 +55,16 @@ export function Timeline({ alerts, competitors }: TimelineProps) {
         return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     };
 
+    // Helper function to get logo URL from competitor name
+    const getCompetitorLogoUrl = (competitorName: string) => {
+        // Convert competitor name to domain format
+        // e.g., "Microsoft Power Automate" -> "microsoft.com"
+        const domain = competitorName.toLowerCase()
+            .split(' ')[0] // Take first word
+            .replace(/[^a-z0-9]/g, '') + '.com';
+        return `https://logo.clearbit.com/${domain}`;
+    };
+
     return (
         <Stack gap="xl">
             <Group grow>
@@ -90,23 +100,30 @@ export function Timeline({ alerts, competitors }: TimelineProps) {
                             bullet={<IconBell size={12} />}
                             title={
                                 <Card withBorder padding="md" radius="md" bg="var(--mantine-color-body)">
-                                    <Stack gap="sm">
-                                        <Group justify="space-between">
-                                            <Group gap="xs">
-                                                <Badge color={CHANNEL_COLORS[alert.channel] || 'gray'} variant="light">
-                                                    {alert.channel}
-                                                </Badge>
-                                                <Badge variant="outline">{alert.competitor}</Badge>
-                                                <Badge variant="light" color="gray" size="sm">Source: {alert.source}</Badge>
+                                    <Group gap="md" align="flex-start" wrap="nowrap">
+                                        <Avatar
+                                            src={getCompetitorLogoUrl(alert.competitor)}
+                                            size={48}
+                                            radius="md"
+                                        />
+                                        <Stack gap="sm" style={{ flex: 1 }}>
+                                            <Group justify="space-between">
+                                                <Group gap="xs">
+                                                    <Badge color={CHANNEL_COLORS[alert.channel] || 'gray'} variant="light">
+                                                        {alert.channel}
+                                                    </Badge>
+                                                    <Badge variant="outline">{alert.competitor}</Badge>
+                                                    <Badge variant="light" color="gray" size="sm">Source: {alert.source}</Badge>
+                                                </Group>
+                                                <Group gap="xs">
+                                                    <IconClock size={14} />
+                                                    <Text size="xs" c="dimmed">{formatDate(alert.date)}</Text>
+                                                </Group>
                                             </Group>
-                                            <Group gap="xs">
-                                                <IconClock size={14} />
-                                                <Text size="xs" c="dimmed">{formatDate(alert.date)}</Text>
-                                            </Group>
-                                        </Group>
-                                        <Title order={5}>{alert.title}</Title>
-                                        {/* <Text size="sm" c="dimmed">{alert.description}</Text> */}
-                                    </Stack>
+                                            <Title order={5}>{alert.title}</Title>
+                                            {/* <Text size="sm" c="dimmed">{alert.description}</Text> */}
+                                        </Stack>
+                                    </Group>
                                 </Card>
                             }
                         />
