@@ -135,7 +135,7 @@ ${parsedData.conclusion.map((item, i) => `${i + 1}. ${item}`).join('\n')}
             ) : parsedData ? (
                 <>
                     {/* Quick Actions Bar */}
-                    <Paper p="md" bg="gray.1" style={{ borderBottom: '2px solid #dee2e6' }}>
+                    <Paper p="md" bg="var(--mantine-color-body)" style={{ borderBottom: '2px solid #dee2e6' }}>
                         <Group justify="space-between">
                             <Group gap="xs">
                                 <Button
@@ -220,7 +220,7 @@ ${parsedData.conclusion.map((item, i) => `${i + 1}. ${item}`).join('\n')}
                                                 <Paper
                                                     key={index}
                                                     p="md"
-                                                    bg="white"
+                                                    bg="var(--mantine-color-body)"
                                                     style={{
                                                         border: '2px solid #28a745',
                                                         borderRadius: '8px',
@@ -264,7 +264,7 @@ ${parsedData.conclusion.map((item, i) => `${i + 1}. ${item}`).join('\n')}
                                                 <Paper
                                                     key={index}
                                                     p="md"
-                                                    bg="white"
+                                                    bg="var(--mantine-color-body)"
                                                     style={{
                                                         border: '2px solid #dc3545',
                                                         borderRadius: '8px',
@@ -309,7 +309,7 @@ ${parsedData.conclusion.map((item, i) => `${i + 1}. ${item}`).join('\n')}
                                             <Paper
                                                 key={index}
                                                 p="md"
-                                                bg="white"
+                                                bg="var(--mantine-color-body)"
                                                 style={{
                                                     border: '2px solid #0d6efd',
                                                     borderRadius: '8px',
