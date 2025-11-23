@@ -28,14 +28,14 @@ Use these tools to gather evidence:
 - **serp**: Search Google for information
 - **crawl**: Extract content from multiple URLs (batch 3-5 at once)
 - **ai_overview**: Get Google AI Overview for quick context
-- **finalize**: Call this when research is complete with your findings and confidence
+- **finalize**: Call this when research is complete with your findings (4-6 sentence answer), comprehensive reasoning, and confidence
 
 ## Finalization
 
 When you have enough evidence:
 ```
 finalize(
-    reasoning="Found X from Y sources confirming Z",
+    reasoning="4-6 sentence answer addressing the datapoint. Include findings from sources and confidence.",
     confidence=0.85
 )
 ```

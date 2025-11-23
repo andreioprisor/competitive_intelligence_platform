@@ -320,7 +320,7 @@ async def enrich_all_competitors(
         "failed": len(failed),
         "results": successful + failed,
         "execution_time_seconds": execution_time,
-        "company_name": company.profile.get("name", company_domain) if company.profile else company_domain
+        "company_name": company_profile.get("name", company_domain)
     }
 
     logger.info("=" * 80)

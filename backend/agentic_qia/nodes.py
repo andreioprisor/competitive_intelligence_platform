@@ -132,6 +132,7 @@ def node_triage(state: AgenticRunState) -> Dict[str, Any]:
         # Format prompt with variables using simple string replacement
         prompt = prompt_template.replace("{current_datetime}", current_datetime)
         prompt = prompt.replace("{company_context}", json.dumps(state.get("company_context", {}), indent=2))
+        prompt = prompt.replace("{competitor_context}", json.dumps(state.get("competitor_context", {}), indent=2) if state.get("competitor_context") else "None")
         prompt = prompt.replace("{datapoint_name}", datapoint_name)
         prompt = prompt.replace("{datapoint_definition}", definition)
         prompt = prompt.replace("{value_ranges}", json.dumps(value_ranges, indent=2) if isinstance(value_ranges, dict) else str(value_ranges))
@@ -320,7 +321,7 @@ def node_controller(state: AgenticRunState) -> Dict[str, Any]:
             "errors": [{"stage": "controller", "error": str(e)}]
         }
 
-def node_final_synthesis(results, company_context: Dict[str, Any], datapoint_definition: Dict[str, Any], goal: str, instructions: Any) -> Dict[str, Any]:
+def node_final_synthesis(results, company_context: Dict[str, Any], competitor_context: Dict[str, Any], datapoint_definition: Dict[str, Any], goal: str, instructions: Any) -> Dict[str, Any]:
     """
     Terminal synthesis node that ALWAYS runs after ReAct loop stops.
 
@@ -328,8 +329,12 @@ def node_final_synthesis(results, company_context: Dict[str, Any], datapoint_def
     regardless of how the loop ended (finalize, assistant stopped, max steps).
 
     Args:
-        state: Current state with messages history
-        llm: LLM instance to use for synthesis
+        results: Results from ReAct agent with messages history
+        company_context: YOUR company info (for reference)
+        competitor_context: Competitor info (target of research)
+        datapoint_definition: Datapoint definition
+        goal: Research goal
+        instructions: Research instructions
 
     Returns:
         Dict with: structured_response (SynthesisResponse), final_answer (str), final_confidence (float)
@@ -358,14 +363,20 @@ def node_final_synthesis(results, company_context: Dict[str, Any], datapoint_def
             instructions_str = instructions
 
         # Create synthesis template
-        synthesis_template = """You are an expert research synthesis AI specialized in converting raw research data into concise, structured summaries for sales teams.
+        synthesis_template = """You are an expert competitive intelligence synthesis AI specialized in converting raw research data into actionable insights for sales and strategy teams.
 
-Your job is to analyze all collected evidence about a target company addressing a specific datapoint, and produce a final synthesis according to the provided datapoint definition.
-If the research was inconclusive or limited, clearly state the limitations, while translating any technical issues, agentic issues or tool issues(eg. tool budgets or inavailability) into non-technical language suitable for sales reps and their managers.
-Explain all insights into a coherent narrative that directly addresses the research goal.
+Your job is to analyze all collected evidence about a COMPETITOR addressing a specific datapoint, and produce a final synthesis with strategic insights and recommended actions.
 
-**Company Context:**
+**YOUR COMPANY (for reference and comparison ONLY):**
 {company_context}
+
+**COMPETITOR (TARGET of research - what you analyzed):**
+{competitor_context}
+
+**CRITICAL UNDERSTANDING:**
+- All findings must be ABOUT the competitor
+- Use company_context ONLY for competitive comparison
+- Research was conducted about the COMPETITOR, not YOUR company
 
 **Research Goal:** {goal}
 
@@ -380,17 +391,26 @@ If the finalize tool was called, use the exact reasoning and confidence provided
 If no finalize was called, synthesize based on all evidence collected throughout the conversation.
 
 **Company Verification Rules:**
-- Only use information clearly tied to the target company
+- Only use information clearly tied to the target COMPETITOR
 - Match by domain name, or company name + location/industry/size
 - Ignore data from companies with similar names unless verified
 
 **Output Format (respond with valid JSON only):**
 {{{{
-  "answer": "comprehensive summary of findings with as much detail as needed",
-  "confidence": 0.0,
-  "mapping_rationale": "explanation of range selection if applicable",
+  "answer": "4-6 sentence summary about the COMPETITOR with evidence",
+  "insights": [
+    "Short insight 1 about the competitor (one sentence)",
+    "Short insight 2 about the competitor (one sentence)",
+    "Short insight 3 about the competitor (one sentence)"
+  ],
+  "suggested_actions": [
+    "Specific recommendation 1 for YOUR company based on competitor finding",
+    "Specific recommendation 2 for YOUR company based on competitor finding"
+  ],
+  "concern_level": 1-5,
+  "concern_rationale": "Why this datapoint should concern YOUR company at this level",
+  "confidence": 0.0-1.0,
   "dp_value": "exact extracted value",
-  "mapped_range": "selected range from datapoint definition",
   "evidence_summary": {{{{
     "key_findings": ["finding 1", "finding 2"],
     "limitations": ["limitation 1"]
@@ -398,11 +418,13 @@ If no finalize was called, synthesize based on all evidence collected throughout
 }}}}
 
 **Field Requirements:**
-- answer: comprehensive summary in non-technical language (no length limit - provide as much detail as needed to fully address the datapoint)
+- answer: 4-6 sentences summary about the COMPETITOR in non-technical language
+- insights: 3-5 short, actionable insights about the COMPETITOR (one sentence each)
+- suggested_actions: 2-4 specific recommendations for YOUR company based on what you learned
+- concern_level: 1-5 scale (1=low concern, 5=critical threat/opportunity)
+- concern_rationale: Brief explanation of why this matters to YOUR company
 - confidence: number between 0.0-1.0 based on evidence strength
-- mapping_rationale: string explaining range selection
 - dp_value: string with exact extracted value
-- mapped_range: string with selected range
 - evidence_summary.key_findings: array of strings
 - evidence_summary.limitations: array of strings
 
@@ -419,6 +441,7 @@ Now produce the final synthesis as valid JSON adhering to the format and require
         # Format synthesis prompt
         prompt = synthesis_template.format(
             company_context=json.dumps(company_context, indent=2),
+            competitor_context=json.dumps(competitor_context, indent=2),
             goal=goal,
             instructions_str=instructions_str,
             datapoint_definition=str(datapoint_definition),

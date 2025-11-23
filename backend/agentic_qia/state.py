@@ -13,6 +13,7 @@ class AgenticRunState(TypedDict):
     # Original inputs
     prompt: str
     company_context: Optional[Dict[str, Any]]
+    competitor_context: Optional[Dict[str, Any]]  # For competitor-specific analysis
     datapoint_definition: Optional[Dict[str, Any]]
     tool_registry: Optional[Dict[str, Any]]
 

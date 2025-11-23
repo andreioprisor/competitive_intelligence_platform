@@ -876,7 +876,7 @@ async def add_criteria(
 
         # Step 4: Initialize orchestrator
         orchestrator = CriteriaAnalysisOrchestrator(
-            max_concurrency=3,  # Configurable - can be moved to env variable
+            max_concurrency=6,  # Configurable - can be moved to env variable
             db_session=db
         )
 
