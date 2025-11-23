@@ -142,6 +142,7 @@ class AddCriteriaResponse(BaseModel):
 class EnrichCompetitorsRequest(BaseModel):
     """Request model for enriching competitors."""
     domain: str = Field(..., description="Company domain")
+    force_refresh: bool = Field(False, description="Force re-enrichment even if cached data exists")
 
 
 class EnrichCompetitorsResponse(BaseModel):
@@ -446,13 +447,40 @@ async def save_company_profile(
         # Run agentic pipeline
         logger.info(f"Starting agentic pipeline for {request.domain}")
         pipeline_result = run_agentic_pipeline(request.dict())
-        
+
         logger.info(f"Agentic pipeline completed for {request.domain}")
-        
+
+        # Auto-trigger competitor enrichment in background
+        try:
+            from run_competitors_enrichment_parallel import enrich_all_competitors
+            import asyncio
+
+            logger.info(f"Auto-triggering competitor enrichment for {request.domain}")
+
+            # Run enrichment in background (non-blocking)
+            async def background_enrichment():
+                try:
+                    await enrich_all_competitors(
+                        company_domain=request.domain,
+                        db=db,
+                        max_concurrent=3
+                    )
+                    logger.info(f"✓ Background competitor enrichment completed for {request.domain}")
+                except Exception as e:
+                    logger.error(f"Background enrichment failed: {e}", exc_info=True)
+
+            # Create task to run in background
+            asyncio.create_task(background_enrichment())
+            logger.info(f"Competitor enrichment task created for {request.domain}")
+
+        except Exception as e:
+            logger.warning(f"Could not trigger background enrichment: {e}")
+            # Don't fail the main request if enrichment fails
+
         action_message = "updated" if operation == "updated" else "saved"
         return SaveCompanyProfileResponse(
             success=True,
-            message=f"Profile {action_message} successfully for {request.domain}",
+            message=f"Profile {action_message} successfully for {request.domain}. Competitor enrichment running in background.",
             profile_id=company.id,
             domain=request.domain,
             agentic_pipeline_result=pipeline_result
@@ -779,6 +807,120 @@ async def record_category_observation(
         "company_id": criteria.company_id
     }
 
+@app.get("/solutions_comparison")
+async def compare_solutions(
+    domain: str = Query(..., description="Company domain"),
+    competitor_domain: str = Query(..., description="Competitor domain"),
+    competitor_solution_name: str = Query(..., description="Competitor solution name"),
+    db: Session = Depends(get_db)
+):
+    """
+    Compare a competitor solution with the mapped company solution.
+
+    This endpoint:
+    1. Finds the competitor in the database
+    2. Looks up the specific solution by name in the competitor's enriched data
+    3. Uses the 'most_similar_to' field to automatically map to company solution
+    4. Returns comparison data (we_are_better, they_are_better, conclusion) directly from DB
+
+    Args:
+        domain: Company domain
+        competitor_domain: Competitor domain
+        competitor_solution_name: Name of the competitor's solution
+        db: Database session (injected)
+
+    Returns:
+        Comparison data with mapped company solution and all comparison fields
+
+    Raises:
+        HTTPException: If company, competitor, or solutions not found
+    """
+    try:
+        logger.info(f"Comparison request for competitor solution: {competitor_solution_name}")
+
+        # Find company
+        clean_domain_str = clean_domain(domain)
+        company = db.query(Company).filter(Company.domain == clean_domain_str).first()
+        if not company:
+            raise HTTPException(status_code=404, detail=f"Company not found: {domain}")
+
+        # Find competitor
+        clean_competitor_domain = clean_domain(competitor_domain)
+        competitor = db.query(Competitor).filter(
+            Competitor.company_id == company.id,
+            Competitor.domain == clean_competitor_domain
+        ).first()
+
+        if not competitor:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Competitor not found: {competitor_domain}"
+            )
+
+        # Get competitor solutions from JSONB field
+        # Handle enriched competitor structure: {"Solutions": [...], "Competitor_Name": "...", ...}
+        competitor_solutions_data = competitor.solutions or {}
+
+        # Extract Solutions array from enriched data
+        if isinstance(competitor_solutions_data, dict) and "Solutions" in competitor_solutions_data:
+            competitor_solutions = competitor_solutions_data.get("Solutions", [])
+        elif isinstance(competitor_solutions_data, list):
+            # Fallback for old format (array of solutions)
+            competitor_solutions = competitor_solutions_data
+        else:
+            competitor_solutions = []
+
+        # Find the specific solution by name
+        matching_solution = None
+        for solution in competitor_solutions:
+            if isinstance(solution, dict):
+                # Try both "solution_name" (enriched format) and "name" (old format)
+                sol_name = solution.get("solution_name", solution.get("name", "")).lower()
+                if competitor_solution_name.lower() in sol_name or sol_name in competitor_solution_name.lower():
+                    matching_solution = solution
+                    break
+
+        if not matching_solution:
+            # Log available solutions for debugging
+            available_solutions = [
+                sol.get("solution_name", sol.get("name", "Unknown"))
+                for sol in competitor_solutions if isinstance(sol, dict)
+            ]
+            logger.error(f"Solution '{competitor_solution_name}' not found. Available: {available_solutions}")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Solution '{competitor_solution_name}' not found for competitor {competitor_domain}. Available solutions: {', '.join(available_solutions)}"
+            )
+
+        # Extract mapped company solution from 'most_similar_to' field
+        company_solution_name = matching_solution.get("most_similar_to", "Unknown Company Solution")
+
+        # Extract comparison data from database
+        comparison_data = {
+            "success": True,
+            "company_solution": company_solution_name,
+            "competitor_solution": matching_solution.get("solution_name", competitor_solution_name),
+            "competitor_name": competitor_solutions_data.get("Competitor_Name", competitor.domain),
+            "we_are_better": matching_solution.get("we_are_better", []),
+            "they_are_better": matching_solution.get("they_are_better", []),
+            "conclusion": matching_solution.get("conclusion", []),
+            "cached": True
+        }
+
+        logger.info(f"Comparison data retrieved: {company_solution_name} vs {comparison_data['competitor_solution']}")
+
+        return comparison_data
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in solutions comparison: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error comparing solutions: {str(e)}"
+        )
+
+
 @app.post(
     "/add-criteria",
     response_model=AddCriteriaResponse,
@@ -953,15 +1095,61 @@ async def enrich_competitors(
     try:
         logger.info(f"Received enrich-competitors request for domain: {request.domain}")
 
+        # Get company from database
+        company = db.query(Company).filter_by(domain=request.domain).first()
+        if not company:
+            raise HTTPException(status_code=404, detail=f"Company not found: {request.domain}")
+
+        # Check if we can return cached data (unless force_refresh is True)
+        if not request.force_refresh:
+            # Query all competitors for this company
+            competitors = db.query(Competitor).filter_by(company_id=company.id).all()
+
+            if competitors:
+                # Check if all competitors have non-empty solutions
+                all_enriched = all(
+                    comp.solutions and len(comp.solutions) > 0
+                    for comp in competitors
+                )
+
+                if all_enriched:
+                    logger.info(f"Returning cached competitor data for {request.domain} ({len(competitors)} competitors)")
+
+                    # Build cached response in same format as enrichment results
+                    cached_results = {
+                        "total": len(competitors),
+                        "successful": len(competitors),
+                        "failed": 0,
+                        "results": [
+                            {
+                                "competitor_domain": comp.domain,
+                                "competitor_id": comp.id,
+                                "success": True,
+                                "data": comp.solutions
+                            }
+                            for comp in competitors
+                        ],
+                        "execution_time_seconds": 0,
+                        "company_name": company.profile.get("name", company.domain) if company.profile else company.domain
+                    }
+
+                    return EnrichCompetitorsResponse(
+                        success=True,
+                        message=f"Returning cached data for {len(competitors)} competitors",
+                        company_id=company.id,
+                        company_name=cached_results['company_name'],
+                        competitors_enriched=len(competitors),
+                        total_competitors=len(competitors),
+                        enrichment_results=cached_results,
+                        execution_time_seconds=0
+                    )
+
         # Run parallel enrichment using simple function
         enrichment_results = await enrich_all_competitors(
             company_domain=request.domain,
             db=db,
             max_concurrent=3
         )
-
-        # Get company for response data
-        company = db.query(Company).filter_by(domain=request.domain).first()
 
         logger.info(f"Enrichment complete in {enrichment_results['execution_time_seconds']:.2f} seconds")
         logger.info(f"Successful: {enrichment_results['successful']}, Failed: {enrichment_results['failed']}")

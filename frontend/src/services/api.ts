@@ -40,6 +40,34 @@ export interface SolutionsComparisonResponse {
     cached: boolean;
 }
 
+export interface EnrichCompetitorsRequest {
+    domain: string;
+    force_refresh?: boolean;
+}
+
+export interface EnrichCompetitorsResponse {
+    success: boolean;
+    message: string;
+    company_id: number;
+    company_name: string;
+    competitors_enriched: number;
+    total_competitors: number;
+    enrichment_results: {
+        total: number;
+        successful: number;
+        failed: number;
+        results: Array<{
+            competitor_domain: string;
+            competitor_id: number;
+            success: boolean;
+            data: any;
+        }>;
+        execution_time_seconds: number;
+        company_name: string;
+    };
+    execution_time_seconds: number;
+}
+
 const API_BASE_URL = 'http://localhost:8000';
 
 export const api = {
@@ -180,17 +208,40 @@ export const api = {
 
     async compareSolutions(
         domain: string,
-        companySolution: any,
-        competitorSolution: any,
-        model: string = 'gemini-3-pro-preview'
-    ): Promise<SolutionsComparisonResponse> {
-        const companySolutionStr = encodeURIComponent(JSON.stringify(companySolution));
-        const competitorSolutionStr = encodeURIComponent(JSON.stringify(competitorSolution));
-        const modelStr = encodeURIComponent(model);
-
+        competitorDomain: string,
+        competitorSolutionName: string
+    ): Promise<{
+        success: boolean;
+        company_solution: string;
+        competitor_solution: string;
+        competitor_name: string;
+        we_are_better: string[];
+        they_are_better: string[];
+        conclusion: string[];
+        cached: boolean;
+    }> {
         const response = await fetch(
-            `${API_BASE_URL}/solutions_comparison?domain=${encodeURIComponent(domain)}&company_solution=${companySolutionStr}&competitor_solution=${competitorSolutionStr}&model=${modelStr}`
+            `${API_BASE_URL}/solutions_comparison?` +
+            `domain=${encodeURIComponent(domain)}&` +
+            `competitor_domain=${encodeURIComponent(competitorDomain)}&` +
+            `competitor_solution_name=${encodeURIComponent(competitorSolutionName)}`
         );
+
+        if (!response.ok) {
+            throw new Error(`API call failed: ${response.statusText}`);
+        }
+
+        return response.json();
+    },
+
+    async enrichCompetitors(domain: string, force_refresh: boolean = false): Promise<EnrichCompetitorsResponse> {
+        const response = await fetch(`${API_BASE_URL}/enrich-competitors`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ domain, force_refresh })
+        });
 
         if (!response.ok) {
             throw new Error(`API call failed: ${response.statusText}`);
