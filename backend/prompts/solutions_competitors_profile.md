@@ -66,32 +66,23 @@ The output MUST be a single, parsable JSON object (NOT an array) representing th
 
   "Solutions": [
     {
-      "Solution_Name": "Specific Product/Service analyzed",
-      "Description": "Brief overview of their offering",
-      "Detected_Features": ["List of validated features"],
-      "Pricing_Intelligence": "Market pricing data or models found",
-
-      "Market_Sentiment": {
-        "Praised_Features": ["What users love about them"],
-        "Common_Complaints": ["What users dislike about them"],
-        "Implementation_Score": "Qualitative assessment of ease of use/setup"
-      },
-
-      "Gap_Analysis": {
-        "Unique_to_Competitor": [
-          "List of features/capabilities present in the Competitor's solution but ABSENT in our Current Solutions",
-          "e.g., Native Salesforce Integration",
-          "e.g., 24/7 Phone Support"
-        ],
-        "Unique_to_Current_Solution": [
-          "List of features/capabilities present in our Current Solutions but ABSENT in the Competitor's solution",
-          "e.g., AI-driven predictive analytics",
-          "e.g., Unlimited seats"
-        ],
-        "Conclusion": "A text based conclusion that summarizes the difference between the two solutions, taking in consideration the Unique_to_Competitor and Unique_to_Current_Solution fields."
-      },
-
-      "Research_Confidence": 0.0
+      "solution_name": "Specific Product/Service analyzed",
+      "most_similar_to": "Name of the most similar solution from our company",
+      "we_are_better": [
+        "Specific advantage #1 our company has",
+        "Specific advantage #2 our company has",
+        "Specific advantage #3 our company has"
+      ],
+      "they_are_better": [
+        "Specific advantage #1 competitor has",
+        "Specific advantage #2 competitor has",
+        "Specific advantage #3 competitor has"
+      ],
+      "conclusion": [
+        "Key takeaway #1 from the comparison",
+        "Key takeaway #2 from the comparison",
+        "Strategic insight or recommendation"
+      ]
     }
   ]
 }

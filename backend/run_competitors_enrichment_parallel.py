@@ -23,6 +23,7 @@ from pathlib import Path
 
 from db_models import Company, Competitor
 from api_clients.gemini_adapter import GeminiAPI
+from schemas import CompetitorProfile
 
 logger = logging.getLogger(__name__)
 
@@ -120,16 +121,20 @@ def _ensure_competitors_in_db(company: Company, db: Session) -> List[Competitor]
 
 
 async def enrich_single_competitor(
-    competitor: Competitor,
-    company: Company,
+    competitor_id: int,
+    competitor_domain: str,
+    company_profile: dict,
+    company_solutions: list,
     db: Session
 ) -> Dict[str, Any]:
     """
     Enrich a single competitor using Gemini with Google Search grounding.
 
     Args:
-        competitor: Competitor model instance to enrich
-        company: Company model instance (for context)
+        competitor_id: Database ID of competitor
+        competitor_domain: Competitor domain
+        company_profile: Company profile dict (for context)
+        company_solutions: Company solutions list (for context)
         db: Database session
 
     Returns:
@@ -140,8 +145,6 @@ async def enrich_single_competitor(
             - data: Dict (enriched profile if successful)
             - error: str (if failed)
     """
-    competitor_domain = competitor.domain
-
     try:
         logger.info(f"[{competitor_domain}] Starting enrichment")
 
@@ -149,10 +152,14 @@ async def enrich_single_competitor(
         prompt_template = _load_prompt_template()
 
         # Build company context
-        company_profile_json = json.dumps(company.profile, indent=2) if company.profile else "{}"
-        solutions_profile_json = json.dumps(company.solutions, indent=2) if company.solutions else "[]"
+        company_profile_json = json.dumps(company_profile, indent=2) if company_profile else "{}"
+        solutions_profile_json = json.dumps(company_solutions, indent=2) if company_solutions else "[]"
 
-        # Build competitor context
+        # Fetch competitor's existing data from DB
+        competitor = db.query(Competitor).filter_by(id=competitor_id).first()
+        if not competitor:
+            raise ValueError(f"Competitor {competitor_id} not found")
+
         competitor_existing_data = json.dumps(competitor.solutions, indent=2) if competitor.solutions else "{}"
 
         # Format prompt with variable substitution
@@ -179,16 +186,18 @@ async def enrich_single_competitor(
         # Parse JSON
         enriched_profile = _parse_json_response(response, competitor_domain)
 
-        # Save to database
-        competitor.solutions = enriched_profile
-        db.commit()
-        db.refresh(competitor)
-
-        logger.info(f"[{competitor_domain}] ✓ Enrichment successful")
+        # Re-fetch competitor and update (avoid session issues)
+        competitor = db.query(Competitor).filter_by(id=competitor_id).first()
+        if competitor:
+            competitor.solutions = enriched_profile
+            db.commit()
+            logger.info(f"[{competitor_domain}] ✓ Enrichment successful")
+        else:
+            raise ValueError(f"Competitor {competitor_id} disappeared during enrichment")
 
         return {
             "competitor_domain": competitor_domain,
-            "competitor_id": competitor.id,
+            "competitor_id": competitor_id,
             "success": True,
             "data": enriched_profile
         }
@@ -199,7 +208,7 @@ async def enrich_single_competitor(
 
         return {
             "competitor_domain": competitor_domain,
-            "competitor_id": competitor.id,
+            "competitor_id": competitor_id,
             "success": False,
             "error": str(e)
         }
@@ -254,16 +263,29 @@ async def enrich_all_competitors(
 
     logger.info(f"Found {len(competitors)} competitors to enrich")
 
+    # Extract company context once (avoid passing ORM objects to async tasks)
+    company_profile = company.profile or {}
+    company_solutions = company.solutions or []
+
+    # Build list of competitor info (ID + domain only, no ORM objects)
+    competitor_info = [(comp.id, comp.domain) for comp in competitors]
+
     # Create semaphore for rate limiting
     semaphore = asyncio.Semaphore(max_concurrent)
 
-    async def enrich_with_semaphore(comp):
+    async def enrich_with_semaphore(comp_id, comp_domain):
         """Wrapper to apply semaphore rate limiting."""
         async with semaphore:
-            return await enrich_single_competitor(comp, company, db)
+            return await enrich_single_competitor(
+                competitor_id=comp_id,
+                competitor_domain=comp_domain,
+                company_profile=company_profile,
+                company_solutions=company_solutions,
+                db=db
+            )
 
     # Launch all tasks in parallel with gather
-    tasks = [enrich_with_semaphore(comp) for comp in competitors]
+    tasks = [enrich_with_semaphore(comp_id, comp_domain) for comp_id, comp_domain in competitor_info]
 
     logger.info(f"Launching {len(tasks)} parallel tasks (max concurrent: {max_concurrent})")
 
@@ -275,10 +297,10 @@ async def enrich_all_competitors(
 
     for i, result in enumerate(results):
         if isinstance(result, Exception):
-            competitor_domain = competitors[i].domain
-            logger.error(f"Task failed for {competitor_domain}: {result}")
+            _, comp_domain = competitor_info[i]
+            logger.error(f"Task failed for {comp_domain}: {result}")
             failed.append({
-                "competitor_domain": competitor_domain,
+                "competitor_domain": comp_domain,
                 "success": False,
                 "error": str(result)
             })
