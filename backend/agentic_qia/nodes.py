@@ -397,6 +397,7 @@ If no finalize was called, synthesize based on all evidence collected throughout
 
 **Output Format (respond with valid JSON only):**
 {{{{
+  "most_important_takeaway": "One punchy sentence headline that captures the most critical finding (max 15 words)",
   "answer": "4-6 sentence summary about the COMPETITOR with evidence",
   "insights": [
     "Short insight 1 about the competitor (one sentence)",
@@ -418,6 +419,7 @@ If no finalize was called, synthesize based on all evidence collected throughout
 }}}}
 
 **Field Requirements:**
+- most_important_takeaway: Single punchy headline sentence (max 15 words) - this will be shown in notifications
 - answer: 4-6 sentences summary about the COMPETITOR in non-technical language
 - insights: 3-5 short, actionable insights about the COMPETITOR (one sentence each)
 - suggested_actions: 2-4 specific recommendations for YOUR company based on what you learned

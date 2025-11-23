@@ -49,6 +49,13 @@ export interface AddCriteriaResponse {
   execution_time_seconds: number;
 }
 
+export interface CriteriaItem {
+  id: number;
+  name: string;
+  definition: string;
+  created_at: string;
+}
+
 export interface CompetitorResponse {
   domain: string;
   solutions: any[];
@@ -338,6 +345,18 @@ export const api = {
       },
       body: JSON.stringify({ domain, force_refresh }),
     });
+
+    if (!response.ok) {
+      throw new Error(`API call failed: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+
+  async getCriterias(domain: string): Promise<CriteriaItem[]> {
+    const response = await fetch(
+      `${API_BASE_URL}/criterias?domain=${encodeURIComponent(domain)}`
+    );
 
     if (!response.ok) {
       throw new Error(`API call failed: ${response.statusText}`);

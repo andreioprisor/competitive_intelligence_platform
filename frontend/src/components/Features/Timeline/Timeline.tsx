@@ -3,6 +3,7 @@ import { IconClock, IconBell } from '@tabler/icons-react';
 import { useState, useMemo, useEffect } from 'react';
 import { api } from '../../../services/api';
 import type { TimelineItem } from '../../../services/api';
+import { TimelineDetailModal } from './TimelineDetailModal';
 
 interface TimelineProps {
     domain?: string;
@@ -33,6 +34,8 @@ export function Timeline({ domain, isActive }: TimelineProps) {
     const [selectedCompetitors, setSelectedCompetitors] = useState<string[]>([]);
     const [selectedCriteria, setSelectedCriteria] = useState<string[]>([]);
     const [selectedConcernLevels, setSelectedConcernLevels] = useState<string[]>([]);
+    const [selectedItem, setSelectedItem] = useState<TimelineItem | null>(null);
+    const [modalOpened, setModalOpened] = useState(false);
 
     const competitors = useMemo(() => {
         return Array.from(new Set(timelineData.map(item => item.competitor_domain)));
@@ -155,7 +158,17 @@ export function Timeline({ domain, isActive }: TimelineProps) {
                                 key={item.id}
                                 bullet={<IconBell size={12} />}
                                 title={
-                                    <Card withBorder padding="md" radius="md" bg="var(--mantine-color-body)">
+                                    <Card
+                                        withBorder
+                                        padding="md"
+                                        radius="md"
+                                        bg="var(--mantine-color-body)"
+                                        style={{ cursor: 'pointer' }}
+                                        onClick={() => {
+                                            setSelectedItem(item);
+                                            setModalOpened(true);
+                                        }}
+                                    >
                                         <Group gap="md" align="flex-start" wrap="nowrap">
                                             <Avatar
                                                 src={getCompetitorLogoUrl(item.competitor_domain)}
@@ -176,7 +189,9 @@ export function Timeline({ domain, isActive }: TimelineProps) {
                                                     </Group>
                                                 </Group>
                                                 <Title order={5}>{item.criteria_name}</Title>
-                                                <Text size="sm" c="dimmed">{answer}</Text>
+                                                <Text size="sm" c="dimmed" lineClamp={2}>
+                                                    {item.value?.dp_value || answer}
+                                                </Text>
                                             </Stack>
                                         </Group>
                                     </Card>
@@ -186,6 +201,15 @@ export function Timeline({ domain, isActive }: TimelineProps) {
                     })}
                 </MantineTimeline>
             )}
+
+            <TimelineDetailModal
+                opened={modalOpened}
+                onClose={() => {
+                    setModalOpened(false);
+                    setSelectedItem(null);
+                }}
+                item={selectedItem}
+            />
         </Stack>
     );
 }

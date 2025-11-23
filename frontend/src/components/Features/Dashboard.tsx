@@ -16,7 +16,7 @@ import type { DropResult } from '@hello-pangea/dnd';
 import { useState, useEffect } from 'react';
 
 import type { CompanyData, SolutionData, CompetitorData } from '../../utils/mapper';
-import type { CompanyAnalysisResponse } from '../../services/api';
+import type { CompanyAnalysisResponse, CriteriaItem } from '../../services/api';
 import { api } from '../../services/api';
 
 interface DashboardProps {
@@ -40,6 +40,7 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
     const [loadingCompetitors, setLoadingCompetitors] = useState(false);
     const [loadingCompanyProfile, setLoadingCompanyProfile] = useState(false);
     const [loadingSolutions, setLoadingSolutions] = useState(false);
+    const [criterias, setCriterias] = useState<CriteriaItem[]>([]);
 
     // Organize competitors by category
     const [columns, setColumns] = useState<{ [key: string]: CompetitorData[] }>(() => ({
@@ -331,6 +332,22 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
                 }
             };
             fetchSolutions();
+        }
+    }, [activeTab, companyData.domain]);
+
+    // Fetch criterias when User Preferences tab becomes active
+    useEffect(() => {
+        if (activeTab === 'userPreferences') {
+            const fetchCriterias = async () => {
+                try {
+                    const criteriasData = await api.getCriterias(companyData.domain);
+                    console.log('Criterias fetched:', criteriasData);
+                    setCriterias(criteriasData);
+                } catch (error) {
+                    console.error('Failed to fetch criterias:', error);
+                }
+            };
+            fetchCriterias();
         }
     }, [activeTab, companyData.domain]);
 
@@ -660,6 +677,7 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
                         customCategories={customCategories}
                         onAddCategory={handleAddCategory}
                         onDeleteCategory={handleDeleteCategory}
+                        criterias={criterias}
                     />
                 </Tabs.Panel>
             </Tabs>

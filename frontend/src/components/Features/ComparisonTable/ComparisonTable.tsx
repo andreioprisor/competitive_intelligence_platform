@@ -52,14 +52,7 @@ export function ComparisonTable({
         setDateRange([start, end]);
     };
 
-    const defaultMetrics = [
-        { key: 'employees', label: 'Employees' },
-        { key: 'marketCap', label: 'Market Cap' },
-        { key: 'revenue', label: 'Revenue' },
-        { key: 'foundedYear', label: 'Founded' }
-    ];
-
-    const allMetrics = [...defaultMetrics, ...customMetrics];
+    const allMetrics = customMetrics;
 
     // Prepare data for graph
     const graphData: Record<string, Record<string, any>> = {};

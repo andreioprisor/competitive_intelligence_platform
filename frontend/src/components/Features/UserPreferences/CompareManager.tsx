@@ -1,6 +1,7 @@
 import { Paper, Title, Text, Table, Button, Group, Modal, TextInput, Textarea, Stack, Badge, ActionIcon, Switch } from '@mantine/core';
 import { useState } from 'react';
 import { IconTrash } from '@tabler/icons-react';
+import type { CriteriaItem } from '../../../services/api';
 
 interface Category {
     id: string;
@@ -9,20 +10,14 @@ interface Category {
     isSystem?: boolean;
 }
 
-const SYSTEM_CATEGORIES: Category[] = [
-    { id: 'sys-1', label: 'Financials', description: 'Revenue, Market Cap, Growth Rate', isSystem: true },
-    { id: 'sys-2', label: 'Market Presence', description: 'Market Share, Geography, Customers', isSystem: true },
-    { id: 'sys-3', label: 'Employee Stats', description: 'Headcount, Satisfaction, Tenure', isSystem: true },
-    { id: 'sys-4', label: 'Technology', description: 'Tech Stack, Patents, R&D', isSystem: true },
-];
-
 interface CompareManagerProps {
     customCategories: Array<{ id: string; label: string; description: string; isSystem?: boolean }>;
     onAddCategory: (category: { label: string; description: string }) => void;
     onDeleteCategory: (id: string) => void;
+    criterias: CriteriaItem[];
 }
 
-export function CompareManager({ customCategories, onAddCategory, onDeleteCategory }: CompareManagerProps) {
+export function CompareManager({ customCategories, onAddCategory, onDeleteCategory, criterias }: CompareManagerProps) {
     const [opened, setOpened] = useState(false);
     const [newCategory, setNewCategory] = useState({ label: '', description: '' });
     const [monitorCompetitors, setMonitorCompetitors] = useState(true);
@@ -35,52 +30,53 @@ export function CompareManager({ customCategories, onAddCategory, onDeleteCatego
         setNewCategory({ label: '', description: '' });
     };
 
-    const allCategories = [...SYSTEM_CATEGORIES, ...customCategories];
-
     return (
         <Paper withBorder radius="md" p="md" bg="var(--mantine-color-body)">
             <Group justify="space-between" mb="md">
                 <div>
-                    <Title order={4}>Compare Manager</Title>
-                    <Text size="sm" c="dimmed">Manage comparison categories</Text>
+                    <Title order={4}>Criteria Manager</Title>
+                    <Text size="sm" c="dimmed">Manage analysis criteria for competitor monitoring</Text>
                 </div>
-                <Button onClick={() => setOpened(true)}>Add Category</Button>
+                <Button onClick={() => setOpened(true)}>Add Criteria</Button>
             </Group>
 
             <Table>
                 <Table.Thead>
                     <Table.Tr>
-                        <Table.Th>Category</Table.Th>
-                        <Table.Th>Description</Table.Th>
-                        <Table.Th>Type</Table.Th>
+                        <Table.Th>Criteria Name</Table.Th>
+                        <Table.Th>Definition</Table.Th>
+                        <Table.Th>Created At</Table.Th>
                         <Table.Th style={{ width: 50 }}></Table.Th>
                     </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
-                    {allCategories.map((category) => {
+                    {criterias.map((criteria) => {
+                        const createdDate = new Date(criteria.created_at);
+                        const formattedDate = createdDate.toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric'
+                        });
+
                         return (
-                            <Table.Tr key={category.id}>
+                            <Table.Tr key={criteria.id}>
                                 <Table.Td>
-                                    <Text fw={500}>{category.label}</Text>
+                                    <Text fw={500}>{criteria.name}</Text>
                                 </Table.Td>
                                 <Table.Td>
-                                    <Text size="sm" c="dimmed">{category.description}</Text>
+                                    <Text size="sm" c="dimmed">{criteria.definition}</Text>
                                 </Table.Td>
                                 <Table.Td>
-                                    <Badge color={category.isSystem ? 'blue' : 'green'} variant="light">
-                                        {category.isSystem ? 'System' : 'Custom'}
-                                    </Badge>
+                                    <Text size="sm" c="dimmed">{formattedDate}</Text>
                                 </Table.Td>
                                 <Table.Td>
-                                    {!category.isSystem && (
-                                        <ActionIcon
-                                            variant="subtle"
-                                            color="red"
-                                            onClick={() => onDeleteCategory(category.id)}
-                                        >
-                                            <IconTrash size={16} />
-                                        </ActionIcon>
-                                    )}
+                                    <ActionIcon
+                                        variant="subtle"
+                                        color="red"
+                                        onClick={() => onDeleteCategory(criteria.id.toString())}
+                                    >
+                                        <IconTrash size={16} />
+                                    </ActionIcon>
                                 </Table.Td>
                             </Table.Tr>
                         );
