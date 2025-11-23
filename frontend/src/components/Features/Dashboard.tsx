@@ -63,6 +63,25 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
                 }));
 
                 setBackendCompetitors(transformedCompetitors);
+
+                // Merge backend competitors into columns by category
+                if (transformedCompetitors.length > 0) {
+                    const newColumns: { [key: string]: CompetitorData[] } = {
+                        Direct: [...columns.Direct],
+                        Indirect: [...columns.Indirect],
+                        Emerging: [...columns.Emerging]
+                    };
+
+                    transformedCompetitors.forEach(comp => {
+                        const category = comp.category || 'Direct';
+                        // Only add if not already in the column
+                        if (!newColumns[category].find((c: CompetitorData) => c.name === comp.name)) {
+                            newColumns[category].push(comp);
+                        }
+                    });
+
+                    setColumns(newColumns);
+                }
             } catch (error) {
                 console.error('Failed to load competitors from backend:', error);
             }
