@@ -33,16 +33,9 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
     const [selectedCompetitor, setSelectedCompetitor] = useState<typeof competitors[0] | null>(null);
     const [selectedCompetitorSolutions, setSelectedCompetitorSolutions] = useState<any>(null);
     const [backendCompetitors, setBackendCompetitors] = useState<CompetitorData[]>([]);
-<<<<<<< HEAD
     const [competitorsWithSolutions, setCompetitorsWithSolutions] = useState<Array<{ name: string; website?: string; solutions?: string[] }>>([]);
     const [competitorsFullData, setCompetitorsFullData] = useState<Array<{ domain: string; solutions: any }>>([]);
     const [isEnrichingCompetitors, setIsEnrichingCompetitors] = useState(false);
-=======
-    const [loadingCompanyProfile, setLoadingCompanyProfile] = useState(false);
-    const [loadingSolutions, setLoadingSolutions] = useState(false);
-    const [loadingCompetitors, setLoadingCompetitors] = useState(false);
-    const [activeTab, setActiveTab] = useState<string>('company');
->>>>>>> eb4e246 (Fix popas bad frontend code. Implement add criteria and view timelin in frontend)
 
     // Organize competitors by category
     const [columns, setColumns] = useState<{ [key: string]: CompetitorData[] }>(() => ({
@@ -243,7 +236,7 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
             // Transform the competitor data to match CompetitorData interface
             const competitorData: CompetitorData = {
                 name: newCompetitor.name,
-                logoUrl: '',
+                logoUrl: newCompetitor.domain ? `https://logo.clearbit.com/${newCompetitor.domain}` : '',
                 description: newCompetitor.description,
                 strategies: [],
                 category: newCompetitor.category,
@@ -351,7 +344,7 @@ export function Dashboard({ companyData, apiResponse, solutions: initialSolution
             // Transform backend format to CompetitorData format
             const transformedCompetitors: CompetitorData[] = competitorsFromBackend.map(comp => ({
                 name: comp.domain,
-                logoUrl: '',
+                logoUrl: `https://logo.clearbit.com/${comp.domain}`,
                 description: `Competitor: ${comp.domain}`,
                 strategies: [],
                 category: 'Direct',
